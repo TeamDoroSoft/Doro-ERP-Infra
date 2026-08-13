@@ -9,6 +9,7 @@ crash.*.log
 # Local variable and override files
 *.auto.tfvars
 *.auto.tfvars.json
+terraform.tfvars
 override.tf
 override.tf.json
 *_override.tf

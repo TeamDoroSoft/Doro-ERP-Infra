@@ -16,9 +16,10 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  description = "Local AWS CLI profile used only to run this bootstrap stack."
+  description = "Optional local AWS CLI profile. Leave null in AWS CloudShell."
   type        = string
-  default     = "erp-dev"
+  default     = null
+  nullable    = true
 }
 
 variable "state_bucket_name" {
@@ -36,6 +37,7 @@ variable "terraform_operator_principal_arns" {
   description = "IAM principals allowed to assume the Terraform execution role."
   type        = set(string)
   default = [
+    "arn:aws:iam::727646470302:user/a-student-06",
     "arn:aws:iam::727646470302:user/b-student-05"
   ]
 

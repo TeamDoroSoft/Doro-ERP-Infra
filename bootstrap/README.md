@@ -17,6 +17,19 @@ terraform plan -out bootstrap.tfplan
 terraform apply bootstrap.tfplan
 ```
 
+AWS Console CloudShell에서는 별도 Profile을 지정하지 않는다.
+
+```bash
+export AWS_REGION=ap-northeast-2
+export AWS_DEFAULT_REGION=ap-northeast-2
+aws sts get-caller-identity
+terraform init
+terraform fmt -check -recursive
+terraform validate
+terraform plan -out=bootstrap.tfplan
+terraform apply bootstrap.tfplan
+```
+
 Apply가 끝나면 `Docs/dev-infra-설계.md`의 가이드에 따라 `erp-dev`가 `doro-erp-dev-terraform` Role을 Assume하도록 구성하고 Identity를 검증한다.
 
 ```powershell

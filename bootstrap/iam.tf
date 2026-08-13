@@ -203,6 +203,32 @@ resource "aws_iam_role_policy" "terraform_iam_management" {
   policy = data.aws_iam_policy_document.terraform_iam_management.json
 }
 
+# PowerUserAccess covers the non-IAM AWS resources in the Dev stack. IAM role
+# creation remains constrained by the project-name, tag and boundary rules above.
+resource "aws_iam_role_policy_attachment" "terraform_power_user" {
+  role       = aws_iam_role.terraform_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
+}
+
+data "aws_iam_policy_document" "terraform_service_linked_roles" {
+  statement {
+    sid     = "CreateRequiredServiceLinkedRoles"
+    effect  = "Allow"
+    actions = ["iam:CreateServiceLinkedRole"]
+    resources = [
+      "arn:aws:iam::*:role/aws-service-role/eks.amazonaws.com/*",
+      "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*",
+      "arn:aws:iam::*:role/aws-service-role/rds.amazonaws.com/*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "terraform_service_linked_roles" {
+  name   = "doro-erp-dev-service-linked-roles"
+  role   = aws_iam_role.terraform_execution.id
+  policy = data.aws_iam_policy_document.terraform_service_linked_roles.json
+}
+
 data "aws_iam_openid_connect_provider" "github" {
   arn = var.github_oidc_provider_arn
 }

@@ -43,10 +43,11 @@ Data
 
 ## Application 배포 단위
 
-Backend는 하나의 Git 저장소에 있지만 다음 다섯 Spring Boot App을 별도 JAR와 Container Image로 빌드하고 독립 배포한다. `platform/*`, `test-support`, `architecture-tests`는 배포 단위가 아니다.
+Backend는 하나의 Git 저장소에 있지만 다음 다섯 업무 App과 Stateless Edge Runtime, 총 여섯 개를 별도 JAR와 Container Image로 빌드하고 독립 배포한다. `platform/*`, `test-support`, `architecture-tests`는 배포 단위가 아니다.
 
 | 서비스 | Gradle Project | 기본 Port | 기본 Image | Runtime 의존성 |
 |---|---|---:|---|---|
+| Edge | `:apps:edge-api` | 8080 | `doro-erp-edge` | 내부 HTTP Routing·HMAC, Database 없음 |
 | Store Access | `:apps:store-access-api` | 8081 | `doro-erp-store-access` | PostgreSQL `store_access_db`, Redis, SQS |
 | Commerce | `:apps:commerce-api` | 8082 | `doro-erp-commerce` | PostgreSQL `commerce_db`, SQS |
 | Payment | `:apps:payment-api` | 8083 | `doro-erp-payment` | PostgreSQL `payment_db`, Toss Test API, SQS |
@@ -58,6 +59,7 @@ Image는 Service 저장소의 Spring Boot Buildpacks 설정으로 만든다. 배
 ```bash
 cd ../Doro-ERP-Service
 ./gradlew bootJars
+./gradlew :apps:edge-api:bootBuildImage --imageName=REGISTRY/doro-erp-edge:GIT_SHA
 ./gradlew :apps:store-access-api:bootBuildImage --imageName=REGISTRY/doro-erp-store-access:GIT_SHA
 ./gradlew :apps:commerce-api:bootBuildImage --imageName=REGISTRY/doro-erp-commerce:GIT_SHA
 ./gradlew :apps:payment-api:bootBuildImage --imageName=REGISTRY/doro-erp-payment:GIT_SHA
@@ -95,7 +97,7 @@ Doro-ERP-Infra/
 | 환경 | 목적 | 필수 구성 | 데이터 성격 |
 |---|---|---|---|
 | Local | 개발과 재현 가능한 통합 테스트 | PostgreSQL, MongoDB, Redis, LocalStack SQS | 폐기 가능한 개발 데이터 |
-| CI | PR 검증과 장애·계약 테스트 | 격리된 임시 의존성, 다섯 App Health | Job 종료 시 폐기 |
+| CI | PR 검증과 장애·계약 테스트 | 격리된 임시 의존성, 여섯 App Health | Job 종료 시 폐기 |
 | Dev | 팀 통합·시연 | 불변 Image, 실제 또는 승인된 SQS 환경, 환경별 Secret | Test Key·비운영 데이터만 사용 |
 | Production 후보 | 향후 운영 | 관리형 제품, TLS, Backup, 관측, Rollback | RPO·RTO·비용 목표 결정 후 활성화 |
 
@@ -168,7 +170,7 @@ Frontend는 공개 Routing 계층을 통해 업무 API를 호출하고 Database,
 - Audit는 MongoDB와 `audit-events` 소비 설정만 받는다.
 - Secret 원문·Digest를 Terraform Output, Plan, CI Log, Container Image와 Application Metric에 출력하지 않는다.
 
-EKS Workload의 AWS 자원 권한은 Pod Identity로 분리한다. Secrets Manager의 값을 Pod에 주입하는 CSI Driver·External Secrets 등의 구현 제품은 아직 미정이며, 선택 후 같은 최소 권한 계약을 Manifest와 Test로 증명한다.
+EKS Workload의 AWS 자원 권한은 Pod Identity로 분리한다. Dev Alpha는 AWS 공식 `aws-secrets-store-csi-driver-provider` EKS Add-on과 Secrets Store CSI Driver를 사용한다. 서비스별 Secret과 방향별 HMAC Secret을 `SecretProviderClass`로 선택해 Kubernetes Secret에 동기화하고, Deployment는 `envFrom`으로 주입한다. 실행 중인 JVM 환경변수는 자동 갱신되지 않으므로 Secret 회전 뒤 대상 Deployment를 Rollout한다.
 
 ## Idempotency Key Material 회전
 
@@ -214,7 +216,7 @@ Legal Hold, S3 Object Lock, HMAC Chain, 삭제 승인 전용 Workload와 장기 
 
 ## 관측성과 운영 신호
 
-다섯 App은 구조화 JSON Log, Health Probe와 Metric을 각각 제공한다. Infra는 수집 Backend 제품보다 먼저 다음 신호 이름과 경보 의도를 맞춘다.
+여섯 App은 구조화 JSON Log, Health Probe와 Metric을 각각 제공한다. Infra는 수집 Backend 제품보다 먼저 다음 신호 이름과 경보 의도를 맞춘다.
 
 | 영역 | 최소 신호 |
 |---|---|
@@ -235,7 +237,7 @@ Infra 구현 시 Pipeline은 다음 순서와 책임을 갖는다.
 
 1. PR에서 Markdown Link, Compose·Terraform·Manifest 정적 검증과 Secret 검사를 수행한다.
 2. 관련 저장소의 Required Check로 Service Root `./gradlew check`와 Front의 Lint·Unit·Build를 통과시킨다.
-3. 다섯 App Image를 같은 Git SHA Tag로 개별 생성하고 취약점·구성 검사를 수행한다.
+3. 여섯 App Image를 같은 Git SHA Tag로 개별 생성하고 취약점·구성 검사를 수행한다.
 4. 환경 승인 뒤 Infra Plan과 배포 Diff를 검토한다.
 5. Database Migration은 서비스별 Migration Credential을 쓰는 제한된 단계에서 실행한다.
 6. 새 Version을 Rollout하고 Health·Smoke·핵심 Event 수렴을 확인한다.
@@ -263,7 +265,7 @@ AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·ALB, 서비스�
 - MongoDB 관리형 또는 자체 운영 제품, Private 연결·백업·복구 목표
 - Redis의 ElastiCache 채택 여부와 Session 가용성 목표
 - EKS Node Group Size·Replica·HPA·NetworkPolicy 구현 방식
-- Secrets Manager와 Kubernetes를 연결할 주입 방식
+- 운영 후보 환경의 Secret Rotation 자동 Rollout 방식
 - CloudWatch 중심 관측 범위와 비용 한도
 - RPO·RTO, Backup 보존, Release·Rollback 전략
 
@@ -273,7 +275,7 @@ AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·ALB, 서비스�
 
 - 선언 파일과 실제 생성 자원의 이름·Port·Database·Queue 계약이 일치한다.
 - 새 개발자가 README 명령만으로 대상 환경을 기동하고 Health를 확인할 수 있다.
-- 다섯 App이 독립 Image와 Credential로 실행되고 다른 서비스 저장소 접근은 실패한다.
+- 여섯 App이 독립 Image와 Credential로 실행되고 다른 서비스 저장소 접근은 실패한다.
 - 깨끗한 환경 Bootstrap과 반복 적용이 성공하며 필요한 Migration·Index가 검증된다.
 - SQS 중복·지연·DLQ, PostgreSQL·MongoDB·Redis 중단과 재기동 뒤 상태 복구를 재현한다.
 - Secret·Token·개인정보가 Git, Image, Terraform State·Plan, Manifest, Log와 Metric에 없다.
