@@ -6,7 +6,7 @@
 >
 > 리전: `ap-northeast-2`
 >
-> 현재 구현 상태: 설계 확정 단계이며 AWS 자원과 Terraform 코드는 아직 생성되지 않았다.
+> 현재 구현 상태: 기존 `team2-DoroLoad` Network를 재사용하는 Dev Alpha Terraform 구현 단계다.
 
 ## 1. 목적과 범위
 
@@ -30,7 +30,7 @@
 | AWS Account | 별도 Dev Account 없이 `727646470302` Account 사용 |
 | Region | `ap-northeast-2` |
 | Environment / Cell | `dev` / `alpha` |
-| VPC CIDR | `10.40.0.0/16`; 현재 Account의 서울 리전 VPC와 중복 없음, 외부 VPN·로컬 경로는 Apply 전 확인 |
+| Network | 기존 `team2-DoroLoad` VPC(`10.24.0.0/16`)와 Public·Application·Data Subnet 재사용 |
 | Availability Zones | az-a = `ap-northeast-2a`(`apne2-az1`), az-b = `ap-northeast-2c`(`apne2-az3`) |
 | Compute | EKS `1.35`, 관리형 Node Group `t3.large` 1대, Root Volume `gp3` 50 GiB, AZ-a 배치 |
 | Application | 서비스별 Replica 1개, HPA 미적용 |
@@ -41,7 +41,9 @@
 | Messaging | Alpha 전용 FIFO Main Queue 3개와 FIFO DLQ 3개 |
 | Container Registry | Amazon ECR, Git SHA 기반 불변 Image Tag |
 | 배포 | 초기 Kustomize 수동 적용 → 통합 안정화 후 GitHub Actions → ECR → GitOps Commit → Argo CD |
-| Secret | AWS Secrets Manager, 서비스별 EKS Pod Identity 최소 권한 |
+| Secret | AWS Secrets Manager, 서비스별 EKS Pod Identity, AWS Secrets Store CSI Provider |
+| 관리 접속 | CloudShell의 `kubectl`로 EKS 관리, SSM으로 Worker Node와 전용 관리 EC2 접속 |
+| Dev Domain | `doro.minseok.click` |
 | 관리 태그 | `Project=Doro-ERP`, `Environment=dev`, `Cell=alpha`, `Team=team2`, `ManagedBy=terraform` |
 
 ## 3. AZ 구성 원칙
@@ -66,30 +68,41 @@ AZ 이름은 AWS Account마다 물리 Zone과의 매핑이 다를 수 있으므�
 
 | 논리 이름 | CIDR | AZ | 용도 |
 |---|---|---|---|
-| `private-app-a` | `10.40.0.0/20` | `ap-northeast-2a` | EKS Node·Pod, EKS Cluster ENI, 내부 ALB |
-| `private-app-b` | `10.40.16.0/20` | `ap-northeast-2c` | EKS Cluster ENI, 내부 ALB의 두 번째 AZ |
-| `private-data-a` | `10.40.32.0/24` | `ap-northeast-2a` | RDS Primary와 DB Subnet Group |
-| `private-data-b` | `10.40.33.0/24` | `ap-northeast-2c` | RDS DB Subnet Group의 두 번째 AZ |
-| `public-egress-a` | `10.40.48.0/24` | `ap-northeast-2a` | NAT Gateway |
+| `private-app-a` | `10.24.10.0/24` | `ap-northeast-2a` | EKS Node·Pod, EKS Cluster ENI, 내부 ALB |
+| `private-app-c` | `10.24.11.0/24` | `ap-northeast-2c` | EKS Cluster ENI, 내부 ALB의 두 번째 AZ |
+| `private-data-a` | `10.24.20.0/24` | `ap-northeast-2a` | RDS Primary와 DB Subnet Group |
+| `private-data-c` | `10.24.21.0/24` | `ap-northeast-2c` | RDS DB Subnet Group의 두 번째 AZ |
+| `public-a` | `10.24.0.0/24` | `ap-northeast-2a` | NAT Gateway |
+| `public-c` | `10.24.1.0/24` | `ap-northeast-2c` | ALB·향후 AZ 확장 |
 
-VPC에는 Internet Gateway를 연결한다. `private-app-a`의 기본 외부 경로는 AZ-a NAT Gateway를 사용한다. `private-app-b`에는 정상 상태에서 외부 송신이 필요한 유료 워크로드를 배치하지 않는다. CloudFront VPC Origin은 Private Subnet의 내부 ALB를 사용하며, CloudFront가 생성하는 Service-managed ENI를 위한 가용 IP를 유지한다.
+기존 VPC와 Subnet, Internet Gateway, Route Table, SSM·SSM Messages·EC2 Messages Interface Endpoint는 Terraform `data` Source로 조회해 재사용한다. 기존 자원은 이 Stack의 State로 Import하지 않으며 삭제·교체하지 않는다. Public-a에 NAT Gateway와 Elastic IP를 새로 만들고, 현재 삭제된 NAT를 가리키는 Private Application Route Table의 `blackhole` 기본 경로를 새 NAT Gateway로 교체한다. 이 기본 경로는 Dev Stack이 소유한다.
+
+CloudFront VPC Origin은 Private Application Subnet의 내부 ALB를 사용하며, CloudFront가 생성하는 Service-managed ENI를 위한 가용 IP를 유지한다.
 
 Kubernetes Service CIDR는 VPC, 기존 VPC, VPN, 팀원 로컬 네트워크와 겹치지 않아야 한다. 실제 네트워크 목록을 확인한 후 Terraform 변수로 명시하며 자동 선택에 의존하지 않는다.
 
 ### 4.2 기존 team2 자원과의 경계
 
-현재 Account에는 `team2-DoroLoad` VPC(`10.24.0.0/16`)와 삭제된 것으로 보이는 EKS Cluster 이름을 Tag로 가진 Load Balancer 2개가 남아 있다. 이 VPC에는 `ap-northeast-2a`·`ap-northeast-2c`의 Public·Application·Data Subnet과 SSM 계열 VPC Endpoint가 있지만 현재 team2 EKS Cluster, EC2 Node, NAT Gateway와 RDS Instance는 확인되지 않았다.
+현재 Account에는 `team2-DoroLoad` VPC(`10.24.0.0/16`)와 삭제된 EKS Cluster 이름을 Tag로 가진 Load Balancer 2개가 남아 있다. 이 VPC에는 `ap-northeast-2a`·`ap-northeast-2c`의 Public·Application·Data Subnet과 SSM 계열 VPC Endpoint가 있고, 현재 team2 EKS Cluster, EC2 Node, NAT Gateway와 RDS Instance는 없다.
 
-해당 자원과 기존 `team2-doroload-*` IAM Role은 이 Dev 인프라의 Terraform State로 Import하거나 재사용하지 않는다. 소유자와 삭제 가능 여부를 별도로 확인하기 전까지 변경·삭제하지 않으며, 신규 Dev 자원은 `10.40.0.0/16` VPC에서 고유한 이름과 공통 Tag로 식별한다.
+VPC·Subnet·Internet Gateway·Route Table·SSM Endpoint는 공유 기반으로 재사용하되 Terraform State로 Import하지 않는다. Terraform은 고정 ID와 VPC 소속·CIDR·AZ를 Precondition으로 검증해 잘못된 Account나 Network에 적용되는 것을 막는다. 과거 EKS가 만든 ALB·NLB·Target Group·Security Group과 기존 `team2-doroload-*` IAM Role은 소유자 확인 전까지 변경·삭제하지 않는다. 신규 자원은 `doro-erp-dev-*` 이름과 공통 Tag로 구분한다.
 
-### 4.3 트래픽 경로
+### 4.3 NAT와 Private AWS 접근
+
+- Private Application Subnet의 기본 경로는 새 NAT Gateway를 사용한다.
+- SSM 접속은 기존 `ssm`, `ssmmessages`, `ec2messages` Interface Endpoint를 우선 사용한다.
+- ECR API·ECR DKR·Secrets Manager·CloudWatch Logs Interface Endpoint와 S3 Gateway Endpoint는 비용을 확인하며 단계적으로 추가한다.
+- Endpoint가 준비되지 않은 AWS API와 ECR Image Layer 접근은 NAT를 사용한다.
+- Data Subnet Route Table에는 Internet 기본 경로를 추가하지 않는다.
+
+### 4.4 트래픽 경로
 
 ```text
 사용자
   → Route 53
   → CloudFront + WAF
   → CloudFront VPC Origin
-  → 내부 ALB (private-app-a, private-app-b)
+  → 내부 ALB (private-app-a, private-app-c)
   → EKS Service / Pod (private-app-a)
   → RDS 또는 EKS 내부 Redis·MongoDB
 ```
@@ -99,15 +112,23 @@ Kubernetes Service CIDR는 VPC, 기존 VPC, VPN, 팀원 로컬 네트워크와 �
 - Database, Redis, MongoDB와 내부 관리 Endpoint는 외부에 공개하지 않는다.
 - Payment Service의 Toss Test API 호출처럼 승인된 외부 HTTPS 요청만 NAT Gateway를 사용한다.
 
+### 4.5 관리 접속
+
+- EKS Cluster와 Kubernetes Resource는 AWS Console CloudShell에서 EKS Access Entry와 `kubectl`로 관리한다.
+- EKS Managed Node Group Instance에는 `AmazonSSMManagedInstanceCore`를 부여해 장애 진단 시 Session Manager로 접속할 수 있게 한다.
+- 별도 관리 EC2 1대를 Private Application Subnet에 두고 RDS·Redis·MongoDB 연결 점검과 SSM Port Forwarding에 사용한다.
+- 관리 EC2는 Amazon Linux 2023 `t4g.micro`, Public IP 없음, Key Pair 없음, Inbound Security Group Rule 없음으로 구성한다.
+- SSH 22번 Port를 공개하지 않고 Session Manager 이력과 IAM 권한을 접속 경계로 사용한다.
+
 ## 5. EKS와 Application 구성
 
-- EKS Cluster Subnet: `private-app-a`, `private-app-b`
+- EKS Cluster Subnet: `private-app-a`, `private-app-c`
 - 관리형 Node Group Subnet: `private-app-a`만 사용
 - Kubernetes Version: `1.35`
 - Node Instance: `t3.large`, Root Volume `gp3` 50 GiB
 - Node 수: Desired/Min/Max를 우선 `1/1/1`로 시작
 - Cell Namespace: `doro-alpha`
-- 서비스: Store Access, Commerce, Payment, Queue, Audit
+- 서비스: Edge, Store Access, Commerce, Payment, Queue, Audit
 - 서비스별 Deployment Replica: 1
 - 서비스별 Ingress를 동일한 Alpha IngressGroup으로 묶어 내부 ALB 1개를 공유
 - AWS 권한은 서비스별 Pod Identity로 분리
@@ -326,11 +347,11 @@ Argo CD는 Dev 인프라의 Bootstrap·Foundation·Data 자원 생성에 필요�
 
 다음 조건을 모두 충족해야 Argo CD 설치와 Repository 연결을 시작할 수 있다.
 
-- `deploy/base`에 다섯 서비스의 Deployment·Service와 필요한 공통 Manifest가 존재한다.
+- `deploy/base`에 Edge를 포함한 여섯 서비스의 Deployment·Service와 필요한 공통 Manifest가 존재한다.
 - `deploy/overlays/dev/alpha`를 `kustomize build` 또는 `kubectl kustomize`로 오류 없이 렌더링할 수 있다.
-- 다섯 Application Image가 ECR에 Git SHA 또는 Image Digest로 존재하며 EKS에서 Pull할 수 있다.
+- 여섯 Application Image가 ECR에 Git SHA 또는 Image Digest로 존재하며 EKS에서 Pull할 수 있다.
 - 승인된 Dev Alpha Overlay의 수동 적용과 재적용이 성공한다.
-- 다섯 Application의 Startup·Readiness·Liveness Probe와 기본 Smoke Test가 통과한다.
+- 여섯 Application의 Startup·Readiness·Liveness Probe와 기본 Smoke Test가 통과한다.
 - 서비스별 Runtime Credential과 Flyway Migration Credential이 분리되고 Migration Job 실행 순서가 확정된다.
 - Secrets Manager·Pod Identity를 통해 Secret을 주입하며 Git과 Manifest에 Secret 원문이 없다.
 - Application의 CPU·Memory Request가 정의되어 Argo CD 구성요소를 포함해 단일 Dev Node에서 기동 가능한지 확인했다.
@@ -342,7 +363,7 @@ Argo CD는 Dev 인프라의 Bootstrap·Foundation·Data 자원 생성에 필요�
 ### 9.3 단계별 도입
 
 1. Foundation·Data 단계에서는 Argo CD 없이 EKS와 AWS 의존성을 검증한다.
-2. 다섯 Application을 Kustomize Dev Alpha Overlay로 수동 배포하고 재현성을 검증한다.
+2. 여섯 Application을 Kustomize Dev Alpha Overlay로 수동 배포하고 재현성을 검증한다.
 3. Argo CD를 설치한 뒤 서비스별 Application을 생성하고 처음에는 수동 Sync로 Git과 Live State의 Diff를 확인한다.
 4. 수동 Sync, Health 판정, Migration과 Rollback 검증이 끝나면 Dev에 자동 Sync를 활성화한다.
 5. Git 외부 변경의 Drift 탐지·Self Heal과 Git에서 제거된 자원의 Prune을 안전한 테스트 Resource로 검증한다.
@@ -365,22 +386,23 @@ Dev 자동 Sync의 목표 정책은 `selfHeal=true`, `prune=true`다. 다만 최
 ### 1단계: Bootstrap
 
 - `erp-dev` 로그인과 Account ID 확인 완료
-- 현재 Account의 서울 리전 VPC와 `10.40.0.0/16` 중복 없음 확인 완료
-- 외부 VPN·팀원 로컬 경로와 `10.40.0.0/16` 중복 확인
+- 기존 `team2-DoroLoad` VPC와 Subnet ID·CIDR·AZ 확인 완료
+- 기존 NAT 부재와 Private Application Route `blackhole` 확인 완료
 - `ap-northeast-2a`와 `ap-northeast-2c` 및 Zone ID 선택 완료
 - Terraform State S3 Backend 생성
 - `doro-erp-dev-terraform` Role과 GitHub OIDC Role 구성
 
 ### 2단계: Foundation
 
-- VPC, Subnet, Route Table, Internet Gateway와 NAT Gateway
+- 기존 VPC·Subnet·Route Table·Internet Gateway·SSM Endpoint 검증과 재사용
+- NAT Gateway 생성과 Private Application Route의 `blackhole` 복구
 - EKS Cluster, 관리형 Node Group, ECR와 기본 IAM
-- EKS Access Entry와 Endpoint 접근 제한
+- EKS Access Entry, Worker Node SSM과 관리 EC2
 
 ### 3단계: Cluster Add-on과 Data
 
 - AWS Load Balancer Controller
-- RDS PostgreSQL, Secrets Manager와 SQS FIFO/DLQ
+- RDS PostgreSQL, Secrets Manager, CSI Provider와 SQS FIFO/DLQ
 - Redis·MongoDB Dev Workload와 Persistent Volume
 
 ### 4단계: Application 수동 통합 배포
@@ -388,7 +410,7 @@ Dev 자동 Sync의 목표 정책은 `selfHeal=true`, `prune=true`다. 다만 최
 - 서비스별 Kustomize Base와 Dev Alpha Overlay
 - ECR Image Pull, Migration Job과 Secret 주입
 - `kubectl apply -k` 재적용, Health Check와 Smoke Test
-- 다섯 Application의 독립 배포와 Resource 사용량 검증
+- 여섯 Application의 독립 배포와 Resource 사용량 검증
 
 ### 5단계: Argo CD와 GitOps
 
@@ -425,12 +447,11 @@ Dev 구성의 코드와 배포 규칙을 재사용할 수 있으므로 전환 �
 
 다음 값은 모두 첫 Bootstrap Apply의 선행조건은 아니며, 해당 자원을 생성하거나 접근 권한을 열기 전에 결정한다.
 
-- `10.40.0.0/16`과 외부 VPN·팀원 로컬 네트워크의 중복 여부
 - Kubernetes Service CIDR
 - RDS Backup 보존일
 - Redis·MongoDB Persistent Volume 크기와 Backup 방식
 - 팀원별 EKS Public Endpoint 허용 CIDR
-- Domain, Route 53 Hosted Zone과 ACM 인증서
+- `doro.minseok.click`, Route 53 Hosted Zone `minseok.click`과 ACM 인증서
 - Argo CD 자체 설치 또는 EKS Managed Capability 선택과 비용
 - Argo CD Git Repository 인증, AppProject·Application 구성과 운영 주체
 - 추가 팀원이 Terraform을 직접 실행해야 할 경우에만 해당 팀원의 인증 Principal ARN

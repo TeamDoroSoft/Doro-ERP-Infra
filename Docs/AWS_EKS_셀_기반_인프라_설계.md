@@ -32,7 +32,7 @@ AWS 배포 Topology·Cell 격리·IngressGroup·자원 소유권은 이 문서�
 
 ## 2. 결론부터 보는 설계 요약
 
-현재 목표는 **AWS의 한 EKS Cluster에서 Cell 단위로 워크로드를 나누고, Cell 내부에는 다섯 개 Backend Application을 독립 배포하는 구조**다.
+현재 목표는 **AWS의 한 EKS Cluster에서 Cell 단위로 워크로드를 나누고, Cell 내부에는 다섯 업무 Application과 Stateless Edge Runtime을 독립 배포하는 구조**다.
 
 ```text
 Tenant Domain
@@ -88,7 +88,7 @@ Alpha Cell
 
 Tenant A와 B는 다음 자원을 공유한다.
 
-- 같은 다섯 Application Deployment와 Service
+- 같은 여섯 Application Deployment와 Service
 - 같은 Cell ALB와 IngressGroup
 - 같은 PostgreSQL Instance 또는 Cluster
 - 같은 Cell의 서비스별 Database
@@ -113,7 +113,7 @@ Bravo Cell은 Tenant C처럼 강화된 격리나 독립 용량이 필요한 고�
 Bravo Cell
 ├─ Tenant C: c.doro.com
 ├─ 전용 ALB·IngressGroup
-├─ 전용 다섯 Application Deployment
+├─ 전용 여섯 Application Deployment
 ├─ 전용 PostgreSQL 4 DB
 ├─ 전용 Redis·MongoDB
 ├─ 전용 SQS Queue·DLQ
@@ -181,8 +181,8 @@ flowchart TB
                 ALB_B[Internal ALB · Bravo]
 
                 subgraph EKS[Amazon EKS]
-                    CELL_A[Namespace doro-alpha<br/>5개 Spring Boot App]
-                    CELL_B[Namespace doro-bravo<br/>5개 Spring Boot App]
+                    CELL_A[Namespace doro-alpha<br/>6개 Spring Boot App]
+                    CELL_B[Namespace doro-bravo<br/>6개 Spring Boot App]
                     ARGO[Argo CD]
                 end
             end
@@ -201,7 +201,7 @@ flowchart TB
 
         SQS_A[SQS FIFO + DLQ · Alpha]
         SQS_B[SQS FIFO + DLQ · Bravo]
-        ECR[ECR · 5개 Image]
+        ECR[ECR · 6개 Image]
         SM[Secrets Manager]
         CW[CloudWatch]
     end
@@ -249,7 +249,7 @@ Tenant 사용자의 요청은 다음 순서로 처리한다.
 3. CloudFront는 WAF와 ACM 인증서를 통해 HTTPS 요청을 받는다.
 4. 정적 경로 `/*`는 OAC를 사용해 Cell의 S3 Vue SPA Origin으로 전달한다.
 5. `/api/*`는 CloudFront VPC Origin을 통해 Cell 전용 내부 ALB로 전달한다.
-6. ALB는 IngressGroup이 구성한 Path 규칙으로 다섯 Kubernetes Service 중 하나를 선택한다.
+6. ALB는 IngressGroup이 구성한 Path 규칙으로 여섯 Kubernetes Service 중 하나를 선택한다.
 7. Backend는 인증 Context에서 Tenant·Store·Actor를 다시 검증한다.
 
 CloudFront·ALB·Ingress의 Host Routing은 Application 인증을 대체하지 않는다. 잘못된 Host나 직접적인 내부 호출이 발생해도 다른 Tenant 데이터가 조회되지 않도록 Repository까지 Tenant Scope를 적용한다.
@@ -304,7 +304,7 @@ NetworkPolicy 적용 여부는 실제 EKS CNI의 Policy Enforcement 설정과 �
 | Migration Job | 자기 Database의 Flyway Migration Credential만 사용 |
 | 운영 관리자 | 승인된 장애 대응과 Rollback, 최소 인원 |
 
-다섯 서비스는 각각 Kubernetes Service Account를 가진다. 하나의 공용 IAM Role이나 AWS Access Key를 공유하지 않는다.
+여섯 서비스는 각각 Kubernetes Service Account를 가진다. 하나의 공용 IAM Role이나 AWS Access Key를 공유하지 않는다.
 
 ### 6.3 Resource와 장애 격리
 
@@ -340,7 +340,7 @@ Cell Alpha IngressGroup: doro-alpha
 
 - 팀원이 담당 Module 범위에서 Route와 Health Check를 함께 변경할 수 있다.
 - 한 서비스 변경이 중앙 Manifest 전체의 Merge Conflict로 이어지지 않는다.
-- 다섯 Application을 독립 배포·Rollback하기 쉽다.
+- 여섯 Application을 독립 배포·Rollback하기 쉽다.
 - Cell Overlay가 같은 Base를 재사용할 수 있다.
 - 서비스별 Smoke Test와 Route 소유권이 명확해진다.
 
@@ -524,7 +524,7 @@ Secret은 AWS Secrets Manager에 저장하고 EKS Pod Identity로 서비스별 �
 - Interface Endpoint: SQS, ECR API, ECR DKR, Secrets Manager, CloudWatch Logs
 - Gateway Endpoint: S3
 
-NAT Gateway는 외부 Provider 통신에 사용한다. 다섯 서비스 중 Toss Test API 호출이 필요한 Payment만 승인된 외부 HTTPS Egress를 사용하도록 제한한다. Runtime Pod가 Package Registry나 임의 Internet Host에 접근해야 한다고 가정하지 않는다.
+NAT Gateway는 외부 Provider 통신에 사용한다. 여섯 서비스 중 Toss Test API 호출이 필요한 Payment만 승인된 외부 HTTPS Egress를 사용하도록 제한한다. Runtime Pod가 Package Registry나 임의 Internet Host에 접근해야 한다고 가정하지 않는다.
 
 ## 11. CI/CD와 GitOps
 
@@ -535,7 +535,7 @@ NAT Gateway는 외부 Provider 통신에 사용한다. 다섯 서비스 중 Toss
 | Terraform | VPC, EKS, RDS, SQS, IAM, ECR, Edge 등 AWS Resource 생성 |
 | Kustomize | Kubernetes Deployment·Service·Ingress·Config의 환경·Cell 차이 관리 |
 | GitHub Actions | Build·Test·Image Push·Manifest Image Tag 갱신 |
-| ECR | 다섯 Application의 불변 Container Image 저장 |
+| ECR | 여섯 Application의 불변 Container Image 저장 |
 | Argo CD | GitOps Repository의 목표 상태를 EKS에 동기화 |
 
 Argo CD가 Terraform을 대신하지 않는다. Terraform은 AWS 기반 자원을, Argo CD는 Cluster 내부 Kubernetes Resource를 관리한다.
@@ -567,7 +567,7 @@ flowchart LR
 6. Readiness, Smoke Test와 핵심 Event 수렴을 확인한다.
 7. 실패하면 이전 Image Tag로 되돌린다. 적용된 Flyway Migration은 되돌리지 않고 Forward-fix한다.
 
-다섯 Application을 항상 함께 배포하지 않는다. 공통 Event·HTTP 계약 변경이 아니라면 변경된 Module만 새 Image로 배포할 수 있다.
+여섯 Application을 항상 함께 배포하지 않는다. 공통 Event·HTTP 계약 변경이 아니라면 변경된 Module만 새 Image로 배포할 수 있다.
 
 ### 11.3 Database Migration
 
@@ -670,13 +670,13 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - PostgreSQL 4 DB와 서비스별 Runtime·Migration Role
 - MongoDB·Redis·LocalStack
 - Cell 개념을 반영한 FIFO Main Queue·DLQ Bootstrap
-- 다섯 Application Health와 기본 Event 흐름
+- 여섯 Application Health와 기본 Event 흐름
 
 ### 단계 2. AWS Network와 EKS 기반
 
 - VPC, 2개 AZ, Public Egress·Private Application·Private Data Subnet
 - EKS 관리형 Node Group과 Pod Identity
-- ECR 5개 Repository
+- ECR 6개 Repository
 - AWS Load Balancer Controller와 Argo CD
 
 ### 단계 3. Alpha 공유 Pool
@@ -714,7 +714,7 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 다음 조건을 만족해야 AWS EKS 인프라가 구현 완료됐다고 판단한다.
 
 - Terraform Plan과 Apply가 깨끗한 승인 환경에서 반복 가능하다.
-- 다섯 Image가 ECR에 Git SHA Tag로 생성되고 독립 배포된다.
+- 여섯 Image가 ECR에 Git SHA Tag로 생성되고 독립 배포된다.
 - 서비스별 Ingress가 하나의 Cell ALB로 결합되고 Route 충돌 검사가 통과한다.
 - Alpha Tenant A와 B가 같은 Pool에서 `tenant_id`로 격리된다.
 - Bravo가 Alpha와 Application·Database·Redis·MongoDB·SQS·Secret을 공유하지 않는다.
@@ -773,4 +773,4 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - Argo CD에서 Terraform까지 임의 실행해 AWS Resource와 Kubernetes 상태의 책임을 섞지 않는다.
 - 운영 준비가 끝나기 전에 실제 Toss 운영 Key, 부분 취소, 다중 Region과 과도한 고가용성 범위를 추가하지 않는다.
 
-이 설계의 목적은 가장 복잡한 인프라를 만드는 것이 아니라, 팀이 독립적으로 개발한 다섯 Application을 안전하게 배포하고 Tenant·Cell·데이터·Event 경계를 설명하고 검증할 수 있게 만드는 것이다.
+이 설계의 목적은 가장 복잡한 인프라를 만드는 것이 아니라, 팀이 독립적으로 개발한 여섯 Application을 안전하게 배포하고 Tenant·Cell·데이터·Event 경계를 설명하고 검증할 수 있게 만드는 것이다.

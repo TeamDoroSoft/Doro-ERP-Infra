@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars and replace with the current CloudShell public IP.
+eks_public_access_cidrs = ["203.0.113.10/32"]
+
+# Change only when a different approved IAM principal manages Kubernetes.
+eks_admin_principal_arn = "arn:aws:iam::727646470302:user/a-student-06"
