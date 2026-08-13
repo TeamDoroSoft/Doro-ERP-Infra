@@ -58,6 +58,45 @@ resource "aws_eks_access_policy_association" "admin" {
   }
 }
 
+resource "aws_launch_template" "eks_node" {
+  name_prefix            = "${local.name_prefix}-alpha-"
+  description            = "Doro ERP Dev Alpha EKS worker nodes with mandatory team tags."
+  update_default_version = true
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      delete_on_termination = true
+      encrypted             = true
+      volume_size           = 50
+      volume_type           = "gp3"
+    }
+  }
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_protocol_ipv6          = "disabled"
+    http_put_response_hop_limit = 2
+    http_tokens                 = "required"
+    instance_metadata_tags      = "enabled"
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = local.common_tags
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags          = local.common_tags
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-alpha-node-template"
+  }
+}
+
 resource "aws_eks_node_group" "alpha" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "${local.name_prefix}-alpha"
@@ -66,8 +105,12 @@ resource "aws_eks_node_group" "alpha" {
 
   ami_type       = "AL2023_x86_64_STANDARD"
   capacity_type  = "ON_DEMAND"
-  disk_size      = 50
   instance_types = ["t3.large"]
+
+  launch_template {
+    id      = aws_launch_template.eks_node.id
+    version = aws_launch_template.eks_node.latest_version
+  }
 
   scaling_config {
     desired_size = 1
