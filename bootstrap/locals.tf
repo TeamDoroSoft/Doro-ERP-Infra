@@ -7,10 +7,11 @@ locals {
     ManagedBy   = "terraform"
   }
 
-  terraform_role_name        = "doro-erp-dev-terraform"
-  github_ecr_role_name       = "doro-erp-dev-github-ecr-push"
-  workload_boundary_name     = "doro-erp-guardrail-dev"
-  project_role_arn_pattern   = "arn:aws:iam::${var.aws_account_id}:role/doro-erp-dev-*"
-  project_policy_arn_pattern = "arn:aws:iam::${var.aws_account_id}:policy/doro-erp-dev-*"
-  workload_boundary_arn      = "arn:aws:iam::${var.aws_account_id}:policy/${local.workload_boundary_name}"
+  terraform_role_name                  = "doro-erp-dev-terraform"
+  github_ecr_role_name                 = "doro-erp-dev-github-ecr-push"
+  workload_boundary_name               = "doro-erp-guardrail-dev"
+  project_role_arn_pattern             = "arn:aws:iam::${var.aws_account_id}:role/doro-erp-dev-*"
+  project_policy_arn_pattern           = "arn:aws:iam::${var.aws_account_id}:policy/doro-erp-dev-*"
+  project_instance_profile_arn_pattern = "arn:aws:iam::${var.aws_account_id}:instance-profile/doro-erp-dev-*"
+  workload_boundary_arn                = "arn:aws:iam::${var.aws_account_id}:policy/${local.workload_boundary_name}"
 }

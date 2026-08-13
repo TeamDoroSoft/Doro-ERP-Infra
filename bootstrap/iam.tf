@@ -133,6 +133,20 @@ data "aws_iam_policy_document" "terraform_iam_management" {
   }
 
   statement {
+    sid    = "ManageProjectInstanceProfiles"
+    effect = "Allow"
+    actions = [
+      "iam:AddRoleToInstanceProfile",
+      "iam:CreateInstanceProfile",
+      "iam:DeleteInstanceProfile",
+      "iam:RemoveRoleFromInstanceProfile",
+      "iam:TagInstanceProfile",
+      "iam:UntagInstanceProfile"
+    ]
+    resources = [local.project_instance_profile_arn_pattern]
+  }
+
+  statement {
     sid    = "ManageProjectPolicies"
     effect = "Allow"
     actions = [
