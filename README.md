@@ -2,7 +2,7 @@
 
 Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 운영 계약을 소유한다.
 
-> 현재 상태: 설계 기준선만 존재한다. Docker Compose, Terraform, 배포 Manifest와 CI Workflow는 아직 구현되지 않았다.
+> 현재 상태: Local 통합 환경과 Dev Alpha AWS Foundation Terraform이 구현되어 있다. ElastiCache Redis와 MongoDB Atlas는 분리된 Terraform Stack으로 관리하며 Kubernetes 배포 Manifest와 CI/CD는 후속 범위다.
 >
 > 목표 구조와 구현 완료를 혼동하지 않는다. 실제 인프라가 추가되면 실행 명령, 검증 명령과 복구 절차를 같은 변경에 포함한다.
 
@@ -13,6 +13,8 @@ Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 �
 - [ERP 기술 스택](<../Docs/의사결정/ERP 기술 스택.md>)
 - [개발 일정 WBS](<../Docs/의사결정/개발 일정 WBS.md>)
 - [MSA 서비스 컨텍스트](../Docs/Specifications/MSA/README.md)
+
+Dev 실행 진입점은 [Foundation Terraform](terraform/environments/dev/README.md), [Redis Terraform](terraform/environments/dev/redis/README.md), [MongoDB Atlas Terraform](terraform/environments/dev/mongodb-atlas/README.md) 순서로 사용한다.
 
 ## 목표 Runtime
 
@@ -39,7 +41,7 @@ Data
    └─ audit-events + DLQ
 ```
 
-관계형 업무 Database는 PostgreSQL로 통일한다. 개발 환경에서는 하나의 Instance에 네 Database를 둘 수 있지만 서비스별 Runtime Role과 Migration Role을 분리한다. Audit Service는 MongoDB만 사용한다. MongoDB의 운영 배포 제품은 비용·호환성·백업 요구를 검토해 별도 결정하며 특정 호환 제품을 MongoDB와 동일하다고 가정하지 않는다.
+관계형 업무 Database는 PostgreSQL로 통일한다. 개발 환경에서는 하나의 Instance에 네 Database를 둘 수 있지만 서비스별 Runtime Role과 Migration Role을 분리한다. Store Access Session은 ElastiCache Redis, Audit 문서는 MongoDB Atlas를 사용하고 둘 다 Dev Alpha 전용으로 격리한다.
 
 ## Application 배포 단위
 
@@ -69,7 +71,7 @@ cd ../Doro-ERP-Service
 
 위 `REGISTRY`와 `GIT_SHA`는 설명용 자리표시자다. 실제 Registry·Tag 전달 방식은 CI Workflow를 구현할 때 명시한다.
 
-## 목표 저장소 구조
+## 저장소 구조
 
 ```text
 Doro-ERP-Infra/
@@ -77,20 +79,15 @@ Doro-ERP-Infra/
 │  ├─ compose.yaml
 │  └─ bootstrap/
 ├─ terraform/
-│  ├─ modules/
-│  │  ├─ postgres/
-│  │  ├─ mongodb/
-│  │  ├─ redis/
-│  │  ├─ sqs/
-│  │  ├─ iam/
-│  │  └─ observability/
-│  └─ environments/
+│  └─ environments/dev/
+│     ├─ redis/
+│     └─ mongodb-atlas/
 └─ deploy/
    ├─ base/
    └─ overlays/
 ```
 
-실제 디렉터리는 해당 실행 구성을 구현할 때 생성한다. 빈 구조만 미리 만들지 않는다.
+Foundation, Redis, MongoDB Atlas는 서로 다른 S3 State Key를 사용하므로 각각 독립적으로 Plan·Apply·Destroy한다.
 
 ## 환경별 책임
 
@@ -103,7 +100,7 @@ Doro-ERP-Infra/
 
 - Local과 CI는 고정 Version, Health Check와 재실행 가능한 Bootstrap을 사용한다.
 - Dev와 운영 후보는 동일 Image를 사용하고 설정·Secret만 환경별로 분리한다.
-- 목표 배포 플랫폼은 AWS EKS·Argo CD로 확정했다. 다만 현재는 설계 단계이므로 Terraform·Kustomize·GitOps 구성이 실제로 존재하는 것처럼 가정하지 않는다.
+- 목표 배포 플랫폼은 AWS EKS·Argo CD로 확정했다. AWS Foundation Terraform은 구현되어 있고 Kustomize·GitOps는 후속 단계다.
 - `.env`와 실제 Credential은 커밋하지 않는다. 예시 파일에는 이름과 형식만 둔다.
 
 ## Routing과 신뢰 경계
@@ -262,8 +259,8 @@ Application 코드 변경이 없는 서비스는 다시 배포하지 않을 수 
 AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·ALB, 서비스별 Ingress의 IngressGroup 통합은 목표 방향으로 확정했다. 실제 자원을 만들기 전에는 다음 운영 수치와 제품 선택을 확정한다.
 
 - RDS PostgreSQL의 Instance Class·Multi-AZ·Cell별 분리 수준
-- MongoDB 관리형 또는 자체 운영 제품, Private 연결·백업·복구 목표
-- Redis의 ElastiCache 채택 여부와 Session 가용성 목표
+- MongoDB Atlas 운영 Tier·PrivateLink·백업 보존·복구 목표
+- ElastiCache Redis Multi-AZ·Failover와 Session 가용성 목표
 - EKS Node Group Size·Replica·HPA·NetworkPolicy 구현 방식
 - 운영 후보 환경의 Secret Rotation 자동 Rollout 방식
 - CloudWatch 중심 관측 범위와 비용 한도
