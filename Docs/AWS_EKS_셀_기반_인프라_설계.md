@@ -6,7 +6,7 @@
 >
 > 기준일: 2026-08-10
 >
-> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis와 MongoDB Atlas 전용 Stack을 추가하는 단계다. Kubernetes 배포와 GitOps는 후속 범위다.
+> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis·MongoDB Atlas 전용 Stack, 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Public Ingress가 구현되었다. Runtime Endpoint·내부 TLS·NetworkPolicy와 GitOps는 후속 범위다.
 
 ## 1. 문서의 목적
 
@@ -249,8 +249,9 @@ Tenant 사용자의 요청은 다음 순서로 처리한다.
 3. CloudFront는 WAF와 ACM 인증서를 통해 HTTPS 요청을 받는다.
 4. 정적 경로 `/*`는 OAC를 사용해 Cell의 S3 Vue SPA Origin으로 전달한다.
 5. `/api/*`는 CloudFront VPC Origin을 통해 Cell 전용 내부 ALB로 전달한다.
-6. ALB는 IngressGroup이 구성한 Path 규칙으로 여섯 Kubernetes Service 중 하나를 선택한다.
-7. Backend는 인증 Context에서 Tenant·Store·Actor를 다시 검증한다.
+6. ALB는 IngressGroup이 구성한 Path 규칙으로 Edge·Store Access·Commerce·Queue 중 하나를 선택한다.
+7. Payment·Audit 공개 요청은 Edge가 Session을 검증하고 내부 HMAC을 추가해 ClusterIP Provider로 전달한다.
+8. Backend는 인증 Context에서 Tenant·Store·Actor를 다시 검증한다.
 
 CloudFront·ALB·Ingress의 Host Routing은 Application 인증을 대체하지 않는다. 잘못된 Host나 직접적인 내부 호출이 발생해도 다른 Tenant 데이터가 조회되지 않도록 Repository까지 Tenant Scope를 적용한다.
 
@@ -327,11 +328,11 @@ Dev에서는 서비스별 1 Replica로 비용을 줄일 수 있다. 운영 후�
 
 ```text
 Cell Alpha IngressGroup: doro-alpha
+├─ Edge Ingress (Payment·Audit 공개 경계)
 ├─ Store Access Ingress
 ├─ Commerce Ingress
-├─ Payment Ingress
 ├─ Queue Ingress
-└─ Audit Ingress
+└─ Payment·Audit ClusterIP Provider
          ↓
       ALB Alpha 1개
 ```
@@ -373,11 +374,15 @@ Cell Alpha IngressGroup: doro-alpha
 
 | 서비스 | 대표 Prefix |
 |---|---|
-| Store Access | `/api/v1/auth`, `/api/v1/stores`, `/api/v1/employees`, `/api/v1/tables` |
-| Commerce | `/api/v1/categories`, `/api/v1/products`, `/api/v1/orders`, `/api/v1/sales` |
-| Payment | `/api/v1/payments` |
+| Store Access | `/api/v1/auth`, `/api/v1/kiosk-auth`, `/api/v1/kiosk-devices`, `/api/v1/security-history`, `/api/v1/store`, `/api/v1/employees`, `/api/v1/tables` |
+| Commerce | `/api/v1/catalog`, `/api/v1/orders`, `/api/v1/sales` |
+| Edge → Payment | `/api/v1/payments` |
 | Queue | `/api/v1/queues` |
-| Audit | `/api/v1/audits` |
+| Edge → Audit | `/api/v1/audits` |
+
+Payment와 Audit의 공개 Prefix는 Edge Ingress가 소유한다. Edge는 Store Access Session을
+검증하고 방향별 HMAC을 추가한 뒤 ClusterIP Provider를 호출하므로 두 Provider에 동일한
+Public Ingress를 추가하지 않는다.
 
 ### 7.4 Route 충돌 방지
 
@@ -617,9 +622,9 @@ Backup은 Live Retention과 별개로 관리한다.
 
 구체적인 RPO·RTO와 Backup 보존일은 아직 결정되지 않았다.
 
-## 13. 목표 Repository 구조
+## 13. Repository 구조
 
-구현이 시작되면 다음과 같은 구조를 사용한다. 빈 디렉터리만 미리 만들지 않고 실행 가능한 Resource와 검증을 함께 추가한다.
+현재 구현과 후속 확장 목표는 다음 구조를 사용한다. 빈 디렉터리만 미리 만들지 않고 실행 가능한 Resource와 검증을 함께 추가한다.
 
 ```text
 Doro-ERP-Infra/
@@ -643,12 +648,14 @@ Doro-ERP-Infra/
 │     └─ production/
 ├─ deploy/
 │  ├─ base/
-│  │  ├─ store-access/
-│  │  ├─ commerce/
-│  │  ├─ payment/
-│  │  ├─ queue/
-│  │  └─ audit/
+│  │  ├─ edge-api/
+│  │  ├─ store-access-api/
+│  │  ├─ commerce-api/
+│  │  ├─ payment-api/
+│  │  ├─ queue-api/
+│  │  └─ audit-api/
 │  ├─ components/
+│  │  ├─ secrets-manager/
 │  │  ├─ cell-default-deny/
 │  │  ├─ observability/
 │  │  └─ pod-identity/
@@ -737,7 +744,8 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - 한 EKS Cluster에서 Cell Namespace를 공유할 수 있다.
 - Alpha는 여러 Tenant가 공유하는 Pool이며 Application의 `tenant_id`로 격리한다.
 - Bravo는 전용 Cell이며 Runtime·데이터·Queue·Secret을 Alpha와 분리한다.
-- 각 Backend Module이 자신의 Deployment·Service·Ingress를 소유한다.
+- 각 Backend Module이 자신의 Deployment·Service를 소유하고, 브라우저 공개 경계를 가진 Module만 Ingress를 소유한다.
+- Payment·Audit 공개 Prefix는 Edge Ingress가 소유하며 Provider의 ClusterIP를 직접 공개하지 않는다.
 - 같은 Cell의 서비스별 Ingress를 IngressGroup으로 하나의 ALB에 결합한다.
 - PostgreSQL·MongoDB·Redis·SQS는 서비스 소유권 계약을 유지한다.
 - SQS Queue는 환경·Cell별로 분리하고 Event에 `cellId`를 넣지 않는다.

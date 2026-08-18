@@ -9,6 +9,8 @@ spec:
       containers:
         - name: store-access-api
           envFrom:
+            - configMapRef:
+                name: store-access-api-runtime
             - secretRef:
                 name: doro-erp-store-access-runtime
           volumeMounts:

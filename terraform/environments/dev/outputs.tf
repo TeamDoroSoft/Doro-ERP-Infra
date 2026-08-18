@@ -8,6 +8,11 @@ output "eks_update_kubeconfig_command" {
   value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.this.name}"
 }
 
+output "load_balancer_controller_role_arn" {
+  description = "Pod Identity IAM role used by the AWS Load Balancer Controller."
+  value       = aws_iam_role.load_balancer_controller.arn
+}
+
 output "management_instance_id" {
   description = "SSM-only management EC2 instance ID."
   value       = aws_instance.management.id

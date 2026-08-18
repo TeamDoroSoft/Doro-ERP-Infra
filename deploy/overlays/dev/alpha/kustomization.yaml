@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: doro-alpha
+resources:
+  - ../../../base
+  - namespace.yaml
+components:
+  - ../../../components/secrets-manager
+patches:
+  - target:
+      kind: Ingress
+    patch: |-
+      - op: replace
+        path: /spec/ingressClassName
+        value: doro-alpha-alb
+images:
+  - name: doro-erp-edge
+    newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-edge
+    newTag: unconfigured
+  - name: doro-erp-store-access
+    newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-store-access
+    newTag: unconfigured
+  - name: doro-erp-commerce
+    newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-commerce
+    newTag: unconfigured
+  - name: doro-erp-payment
+    newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-payment
+    newTag: unconfigured
+  - name: doro-erp-queue
+    newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-queue
+    newTag: unconfigured
+  - name: doro-erp-audit
+    newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-audit
+    newTag: unconfigured

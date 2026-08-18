@@ -9,6 +9,8 @@ spec:
       containers:
         - name: edge-api
           envFrom:
+            - configMapRef:
+                name: edge-api-runtime
             - secretRef:
                 name: doro-erp-edge-runtime
           volumeMounts:
