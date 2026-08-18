@@ -32,19 +32,13 @@ variable "atlas_cluster_name" {
   default     = "doro-erp-dev-alpha-audit"
 }
 
-variable "atlas_instance_size" {
-  description = "Dedicated Atlas tier. M10 is the minimum tier used with AWS PrivateLink."
+variable "atlas_region" {
+  description = "Atlas AWS region that supports M0 Free clusters."
   type        = string
-  default     = "M10"
+  default     = "AP_NORTHEAST_2"
 
   validation {
-    condition     = can(regex("^M([1-9][0-9]|[1-9][0-9]{2,})$", var.atlas_instance_size))
-    error_message = "Use a dedicated Atlas M-tier such as M10."
+    condition     = can(regex("^[A-Z]+(_[A-Z0-9]+)+$", var.atlas_region))
+    error_message = "atlas_region must use an Atlas region code such as AP_NORTHEAST_2."
   }
-}
-
-variable "atlas_termination_protection_enabled" {
-  description = "Protect the Atlas cluster from deletion. Set false and apply before an intentional destroy."
-  type        = bool
-  default     = true
 }
