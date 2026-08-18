@@ -9,6 +9,8 @@ spec:
       containers:
         - name: commerce-api
           envFrom:
+            - configMapRef:
+                name: commerce-api-runtime
             - secretRef:
                 name: doro-erp-commerce-runtime
           volumeMounts:

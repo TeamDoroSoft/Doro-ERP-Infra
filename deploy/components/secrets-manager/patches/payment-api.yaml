@@ -9,6 +9,8 @@ spec:
       containers:
         - name: payment-api
           envFrom:
+            - configMapRef:
+                name: payment-api-runtime
             - secretRef:
                 name: doro-erp-payment-runtime
           volumeMounts:

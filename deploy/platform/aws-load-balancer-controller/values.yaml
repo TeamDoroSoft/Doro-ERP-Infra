@@ -1,0 +1,13 @@
+clusterName: doro-erp-dev
+region: ap-northeast-2
+vpcId: vpc-0fd66ab523924fc38
+
+replicaCount: 2
+
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+
+enableShield: false
+enableWaf: false
+enableWafv2: false

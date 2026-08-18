@@ -1,0 +1,41 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: IngressClassParams
+metadata:
+  name: doro-alpha-alb
+spec:
+  loadBalancerName: doro-erp-dev-alpha
+  namespaceSelector:
+    matchLabels:
+      doro.erp/environment: dev
+      doro.erp/cell: alpha
+  group:
+    name: doro-alpha
+  scheme: internal
+  subnets:
+    ids:
+      - subnet-000e8271451fdf084
+      - subnet-063e9f24a951f3405
+  ipAddressType: ipv4
+  targetType: ip
+  tags:
+    - key: Project
+      value: Doro-ERP
+    - key: Environment
+      value: dev
+    - key: Cell
+      value: alpha
+    - key: Team
+      value: team2
+    - key: ManagedBy
+      value: aws-load-balancer-controller
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: doro-alpha-alb
+spec:
+  controller: ingress.k8s.aws/alb
+  parameters:
+    apiGroup: elbv2.k8s.aws
+    kind: IngressClassParams
+    name: doro-alpha-alb

@@ -9,6 +9,8 @@ spec:
       containers:
         - name: audit-api
           envFrom:
+            - configMapRef:
+                name: audit-api-runtime
             - secretRef:
                 name: doro-erp-audit-runtime
           volumeMounts:

@@ -2,7 +2,7 @@
 
 Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 운영 계약을 소유한다.
 
-> 현재 상태: Local 통합 환경과 Dev Alpha AWS Foundation Terraform이 구현되어 있다. ElastiCache Redis와 MongoDB Atlas는 분리된 Terraform Stack으로 관리하며 Kubernetes 배포 Manifest와 CI/CD는 후속 범위다.
+> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Public Ingress가 구현되어 있다. 실제 AWS 적용 상태는 별도로 확인해야 하며 Runtime Endpoint·내부 TLS·NetworkPolicy·Argo CD와 CI/CD는 후속 범위다.
 >
 > 목표 구조와 구현 완료를 혼동하지 않는다. 실제 인프라가 추가되면 실행 명령, 검증 명령과 복구 절차를 같은 변경에 포함한다.
 
@@ -83,11 +83,14 @@ Doro-ERP-Infra/
 │     ├─ redis/
 │     └─ mongodb-atlas/
 └─ deploy/
-   ├─ base/
-   └─ overlays/
+   ├─ base/                   # 여섯 Application 공통 Manifest
+   ├─ components/             # Secrets Manager 등 선택 기능
+   ├─ platform/               # Cluster 공통 Controller와 IngressClass
+   └─ overlays/dev/alpha/     # Dev Alpha 조합
 ```
 
 Foundation, Redis, MongoDB Atlas는 서로 다른 S3 State Key를 사용하므로 각각 독립적으로 Plan·Apply·Destroy한다.
+Kubernetes Manifest의 현재 범위와 배포 전 필수 조건은 [deploy README](deploy/README.md)를 따른다.
 
 ## 환경별 책임
 
@@ -100,7 +103,8 @@ Foundation, Redis, MongoDB Atlas는 서로 다른 S3 State Key를 사용하므�
 
 - Local과 CI는 고정 Version, Health Check와 재실행 가능한 Bootstrap을 사용한다.
 - Dev와 운영 후보는 동일 Image를 사용하고 설정·Secret만 환경별로 분리한다.
-- 목표 배포 플랫폼은 AWS EKS·Argo CD로 확정했다. AWS Foundation Terraform은 구현되어 있고 Kustomize·GitOps는 후속 단계다.
+- 목표 배포 플랫폼은 AWS EKS·Argo CD로 확정했다. Kustomize Base, Dev Alpha 조합,
+  AWS Load Balancer Controller IAM·설치 값과 Public Ingress는 구현되어 있고 실제 Runtime 설정·GitOps는 후속 단계다.
 - `.env`와 실제 Credential은 커밋하지 않는다. 예시 파일에는 이름과 형식만 둔다.
 
 ## Routing과 신뢰 경계
