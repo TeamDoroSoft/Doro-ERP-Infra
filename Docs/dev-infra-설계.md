@@ -36,8 +36,8 @@
 | Application | 서비스별 Replica 1개, HPA 미적용 |
 | Ingress | AWS Load Balancer Controller, Alpha IngressGroup, 내부 ALB 1개 |
 | PostgreSQL | RDS for PostgreSQL `17.10`, `db.t4g.small`, `gp3` 20 GiB, Single-AZ Instance 1개, 서비스별 Database 4개 |
-| Redis | EKS 내부 단일 인스턴스, Dev 전용 |
-| MongoDB | EKS 내부 단일 인스턴스, Dev Audit 전용 |
+| Redis | ElastiCache for Redis OSS 7.1, Dev Alpha Store Access 전용, TLS·RBAC |
+| MongoDB | MongoDB Atlas 8.0 M10 Replica Set, Dev Alpha Audit 전용, AWS PrivateLink |
 | Messaging | Alpha 전용 FIFO Main Queue 3개와 FIFO DLQ 3개 |
 | Container Registry | Amazon ECR, Git SHA 기반 불변 Image Tag |
 | 배포 | 초기 Kustomize 수동 적용 → 통합 안정화 후 GitHub Actions → ECR → GitOps Commit → Argo CD |
@@ -55,7 +55,7 @@
 - RDS DB Subnet Group은 서로 다른 AZ의 Subnet을 최소 2개 포함해야 한다.
 - CloudFront는 전역 서비스이므로 위 2-AZ 조건의 원인이 아니다. 다만 VPC Origin으로 사용할 내부 ALB가 ALB의 2-AZ 조건을 따른다.
 - EKS 관리형 Node Group은 AZ-a의 Application Subnet만 사용한다.
-- Application Pod, Redis와 MongoDB는 AZ-a Node에서만 실행한다.
+- Application Pod는 AZ-a Node에서 실행한다. Redis는 Data Subnet의 ElastiCache, MongoDB는 Atlas 서울 Region에서 운영한다.
 - RDS Instance는 AZ-a에 Single-AZ로 생성한다. DB Subnet Group에는 AZ-a와 AZ-b를 모두 등록한다.
 - NAT Gateway는 AZ-a에 1개만 생성한다.
 - ALB는 AZ-a와 AZ-b에 걸쳐 생성되지만 Target Pod는 AZ-a에만 존재할 수 있다. 이는 개발 환경 축소안이며 AZ-a 장애를 견디는 고가용성 구성은 아니다.
@@ -104,7 +104,7 @@ VPC·Subnet·Internet Gateway·Route Table·SSM Endpoint는 공유 기반으로 
   → CloudFront VPC Origin
   → 내부 ALB (private-app-a, private-app-c)
   → EKS Service / Pod (private-app-a)
-  → RDS 또는 EKS 내부 Redis·MongoDB
+  → RDS·ElastiCache Redis 또는 AWS PrivateLink를 통한 MongoDB Atlas
 ```
 
 - Frontend는 S3에 배포하고 CloudFront OAC를 통해서만 제공한다.
@@ -132,9 +132,9 @@ VPC·Subnet·Internet Gateway·Route Table·SSM Endpoint는 공유 기반으로 
 - 서비스별 Deployment Replica: 1
 - 서비스별 Ingress를 동일한 Alpha IngressGroup으로 묶어 내부 ALB 1개를 공유
 - AWS 권한은 서비스별 Pod Identity로 분리
-- Redis와 MongoDB는 Dev에서만 EKS 내부 단일 인스턴스로 운영
+- Redis는 Dev Alpha 전용 ElastiCache 단일 Node로, MongoDB는 Atlas M10 3-Node Replica Set으로 운영
 
-Redis와 MongoDB의 단일 인스턴스 구성은 장애 복구와 고가용성을 보장하지 않는다. Persistent Volume, 백업과 재생성 절차는 구현 시 검증하며 실제 운영 전에는 관리형 서비스 또는 복제 구성을 다시 선택한다.
+ElastiCache는 Dev 비용 절감을 위해 단일 Node로 구성하므로 자동 Failover를 제공하지 않는다. Atlas는 3-Node Replica Set과 Cloud Backup을 사용한다. 운영 전에는 두 제품 모두 RPO·RTO, Backup 보존, Failover와 비용을 다시 확정한다.
 
 ## 6. 데이터와 Messaging
 
@@ -403,7 +403,7 @@ Dev 자동 Sync의 목표 정책은 `selfHeal=true`, `prune=true`다. 다만 최
 
 - AWS Load Balancer Controller
 - RDS PostgreSQL, Secrets Manager, CSI Provider와 SQS FIFO/DLQ
-- Redis·MongoDB Dev Workload와 Persistent Volume
+- ElastiCache Redis와 MongoDB Atlas·AWS PrivateLink 전용 Terraform Stack
 
 ### 4단계: Application 수동 통합 배포
 
@@ -435,8 +435,8 @@ Dev 자동 Sync의 목표 정책은 `selfHeal=true`, `prune=true`다. 다만 최
 - Stateless Application을 최소 2개 AZ와 Replica 2개 이상으로 분산
 - EKS Node Group 다중 AZ 구성과 Auto Scaling
 - RDS Multi-AZ, Backup 보존, RPO·RTO
-- Redis 관리형 서비스와 Failover 구성
-- MongoDB 관리형 제품, 복제, Backup과 TTL 호환성
+- ElastiCache Multi-AZ·Replica와 Failover 구성
+- MongoDB Atlas Tier·복제 Region, Backup 보존과 TTL 복구 정책
 - NAT Gateway 다중 AZ 여부
 - 운영 Account 분리 여부와 배포 승인 절차
 - Domain, 인증서, WAF 규칙과 관측·경보 기준
@@ -449,7 +449,7 @@ Dev 구성의 코드와 배포 규칙을 재사용할 수 있으므로 전환 �
 
 - Kubernetes Service CIDR
 - RDS Backup 보존일
-- Redis·MongoDB Persistent Volume 크기와 Backup 방식
+- ElastiCache Snapshot 보존과 Atlas Cloud Backup·PIT 보존 기간
 - 팀원별 EKS Public Endpoint 허용 CIDR
 - `doro.minseok.click`, Route 53 Hosted Zone `minseok.click`과 ACM 인증서
 - Argo CD 자체 설치 또는 EKS Managed Capability 선택과 비용

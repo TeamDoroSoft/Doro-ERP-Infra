@@ -13,6 +13,8 @@
 - AWS Secrets Store CSI Provider Add-on, Secret Rotation과 Pod Identity
 - 비공개 Frontend S3, CloudFront, WAF, ACM, `doro.minseok.click`
 
+Redis와 MongoDB는 Foundation과 State 수명주기를 분리한다. Foundation Apply 후 각각 [`redis/`](redis/README.md)와 [`mongodb-atlas/`](mongodb-atlas/README.md)에서 실행한다.
+
 ALB는 이 Stack에서 직접 만들지 않는다. AWS Load Balancer Controller와 Dev Alpha Ingress를 Kubernetes에 적용할 때 생성하며, `/api/*` CloudFront VPC Origin은 내부 ALB가 생긴 다음 단계에서 연결한다.
 
 ## 1. CloudShell 준비

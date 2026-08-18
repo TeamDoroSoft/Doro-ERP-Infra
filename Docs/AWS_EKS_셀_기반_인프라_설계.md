@@ -6,7 +6,7 @@
 >
 > 기준일: 2026-08-10
 >
-> 현재 구현 상태: 설계 단계. Terraform, Kustomize, GitHub Actions, Argo CD Application과 AWS 실자원은 아직 구현되지 않았다.
+> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis와 MongoDB Atlas 전용 Stack을 추가하는 단계다. Kubernetes 배포와 GitOps는 후속 범위다.
 
 ## 1. 문서의 목적
 
@@ -56,8 +56,8 @@ Tenant Domain
 | API Routing | 서비스별 Ingress를 Cell별 `IngressGroup`으로 결합 |
 | Frontend | Vue SPA를 S3에 배포하고 CloudFront OAC로만 접근 |
 | 관계형 데이터 | Amazon RDS for PostgreSQL, 서비스별 Database와 Role |
-| Session | Redis. 운영은 ElastiCache 우선 권고, EKS StatefulSet은 선택 과제 |
-| Audit | MongoDB. 관리형 제품과 운영 방식은 아직 결정 필요 |
+| Session | Dev Alpha는 ElastiCache for Redis OSS 7.1 단일 Node, TLS·RBAC |
+| Audit | Dev Alpha는 MongoDB Atlas 8.0 M10 3-Node Replica Set, AWS PrivateLink |
 | Messaging | Cell별 SQS FIFO Main Queue 3개와 FIFO DLQ 3개 |
 | Secret | AWS Secrets Manager, EKS Pod Identity 기반 최소 권한 |
 | 관측성 | CloudWatch Log·Metric·Alarm + Application Actuator·Micrometer |
@@ -425,14 +425,14 @@ Multi-AZ, Instance Class, Storage Auto Scaling, RPO·RTO와 Backup 보존일은 
 
 Redis는 Store Access의 직원 Session과 짧은 보안 상태만 저장한다. 주문·결제·대기열의 업무 정본으로 사용하지 않는다.
 
-운영 선택지는 다음과 같다.
+Dev Alpha는 ElastiCache for Redis OSS 7.1로 확정한다. Data Subnet 두 개의 Subnet Group을 사용하되 비용 절감을 위해 Node는 한 개만 생성하고 자동 Failover는 끈다.
 
 | 선택 | 장점 | 부담·주의점 |
 |---|---|---|
 | ElastiCache for Redis | Backup·Failover·Patch·Monitoring을 AWS가 지원 | 비용, 세부 운영 제약 |
 | EKS StatefulSet | Kubernetes 운영 경험을 포트폴리오로 보여주기 쉬움 | PVC·Backup·Failover·Upgrade·Eviction을 팀이 책임 |
 
-EKS 내부에 Redis를 배포한다고 해서 자동으로 더 안전해지는 것은 아니다. 보안은 Public 접근 금지, NetworkPolicy, TLS·인증, Secret 관리, 최소 권한과 Backup으로 결정된다. 운영 후보는 ElastiCache를 우선 권고하고, EKS Redis는 Local·Dev 또는 명시적인 학습 범위에서만 선택한다.
+Redis는 TLS와 RBAC를 사용하고 EKS Cluster Security Group 및 SSM 관리 EC2 Security Group에서만 접근한다. Spring Session Indexed Repository를 위해 `notify-keyspace-events=Egx`, 세션의 조용한 축출을 막기 위해 `maxmemory-policy=noeviction`을 사용한다. 비밀번호는 Terraform State가 아닌 Store Access Secrets Manager Secret에 저장한다.
 
 어느 방식을 선택하든 Alpha와 Bravo Session은 공유하지 않는다. Cookie와 Session Key도 Cell을 넘겨 재사용하지 않는다.
 
@@ -447,7 +447,7 @@ Audit Service는 Cell 내부 업무 서비스의 Audit Event를 `audit.audit_rec
 - `expiresAt` TTL Index와 조회 시 논리 만료 조건을 함께 적용한다.
 - 기본 Retention은 90일이며 기존 Document에 정책을 암묵적으로 소급하지 않는다.
 
-MongoDB의 관리형 제품, Private 연결, Backup과 복구 목표는 아직 결정되지 않았다. 제품을 선택할 때 MongoDB Driver·Index·TTL 호환성을 실제로 검증한다.
+Dev Alpha는 MongoDB Atlas 8.0 M10 Dedicated 3-Node Replica Set으로 확정한다. Atlas는 AWS 서울 Region에 배치하고 기존 `team2` VPC의 Data Subnet 두 개에 만든 Interface Endpoint와 AWS PrivateLink로만 연결한다. Cloud Backup과 PIT를 활성화한다. Audit Database User와 `AUDIT_MONGODB_URI`는 Terraform State에 비밀번호가 남지 않도록 Atlas Console과 AWS Secrets Manager에서 별도로 주입한다. Application 기동 후 Unique·조회·TTL Index 생성과 복구 동작을 실제로 검증한다.
 
 ## 9. SQS FIFO와 Cell 격리
 
@@ -743,12 +743,12 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - SQS Queue는 환경·Cell별로 분리하고 Event에 `cellId`를 넣지 않는다.
 - EKS Pod Identity와 서비스별 IAM 최소 권한을 사용한다.
 
-### 16.2 구현 전 결정이 필요한 사항
+### 16.2 운영 전 결정이 필요한 사항
 
 | 항목 | 권고·결정 필요 내용 |
 |---|---|
-| MongoDB | 관리형 제품, Private 연결, Backup, 비용과 TTL 호환성 |
-| Redis | 운영은 ElastiCache 권고, EKS StatefulSet 채택 여부 |
+| MongoDB | Atlas 운영 Tier·다중 Region, Backup/PIT 보존, 비용과 TTL 복구 정책 |
+| Redis | ElastiCache Multi-AZ·Replica·자동 Failover와 Session 유실 허용 범위 |
 | RDS | Dev·운영 Instance Class, Multi-AZ, Backup 보존, RPO·RTO |
 | EKS | Node Group Size, 최소 Replica, HPA 기준과 비용 상한 |
 | Edge | Cell별 CloudFront·S3 완전 분리 여부와 Domain 발급 절차 |
