@@ -13,6 +13,114 @@ patches:
       - op: replace
         path: /spec/ingressClassName
         value: doro-alpha-alb
+  - target:
+      kind: ConfigMap
+      name: edge-api-runtime
+    patch: |-
+      - op: add
+        path: /data/STORE_ACCESS_INTERNAL_BASE_URL
+        value: https://store-access-api.doro-alpha.svc.cluster.local:8081
+      - op: add
+        path: /data/AUDIT_INTERNAL_BASE_URL
+        value: https://audit-api.doro-alpha.svc.cluster.local:8085
+      - op: add
+        path: /data/PAYMENT_INTERNAL_BASE_URL
+        value: https://payment-api.doro-alpha.svc.cluster.local:8083
+  - target:
+      kind: ConfigMap
+      name: store-access-api-runtime
+    patch: |-
+      - op: add
+        path: /data/STORE_ACCESS_DB_URL
+        value: jdbc:postgresql://doro-erp-dev-postgres.cnqmcq6uwqa3.ap-northeast-2.rds.amazonaws.com:5432/store_access_db?sslmode=require
+      - op: add
+        path: /data/SPRING_FLYWAY_ENABLED
+        value: "false"
+      - op: add
+        path: /data/STORE_ACCESS_REDIS_HOST
+        value: master.doro-erp-dev-alpha-session.q2tpkl.apn2.cache.amazonaws.com
+      - op: add
+        path: /data/STORE_ACCESS_REDIS_PORT
+        value: "6379"
+      - op: add
+        path: /data/STORE_ACCESS_REDIS_SSL_ENABLED
+        value: "true"
+      - op: add
+        path: /data/COMMERCE_INTERNAL_BASE_URL
+        value: https://commerce-api.doro-alpha.svc.cluster.local:8082
+      - op: add
+        path: /data/STORE_ACCESS_AUDIT_STANDARD_QUEUE_URL
+        value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-audit-events.fifo
+  - target:
+      kind: ConfigMap
+      name: commerce-api-runtime
+    patch: |-
+      - op: add
+        path: /data/COMMERCE_DB_URL
+        value: jdbc:postgresql://doro-erp-dev-postgres.cnqmcq6uwqa3.ap-northeast-2.rds.amazonaws.com:5432/commerce_db?sslmode=require
+      - op: add
+        path: /data/SPRING_FLYWAY_ENABLED
+        value: "false"
+      - op: add
+        path: /data/STORE_ACCESS_INTERNAL_BASE_URL
+        value: https://store-access-api.doro-alpha.svc.cluster.local:8081
+      - op: add
+        path: /data/QUEUE_INTERNAL_BASE_URL
+        value: https://queue-api.doro-alpha.svc.cluster.local:8084
+      - op: add
+        path: /data/COMMERCE_PAYMENT_EVENTS_QUEUE_URL
+        value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-commerce-events.fifo
+      - op: add
+        path: /data/COMMERCE_QUEUE_EVENTS_QUEUE_URL
+        value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-queue-events.fifo
+      - op: add
+        path: /data/COMMERCE_AUDIT_STANDARD_QUEUE_URL
+        value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-audit-events.fifo
+  - target:
+      kind: ConfigMap
+      name: payment-api-runtime
+    patch: |-
+      - op: add
+        path: /data/PAYMENT_DB_URL
+        value: jdbc:postgresql://doro-erp-dev-postgres.cnqmcq6uwqa3.ap-northeast-2.rds.amazonaws.com:5432/payment_db?sslmode=require
+      - op: add
+        path: /data/SPRING_FLYWAY_ENABLED
+        value: "false"
+      - op: add
+        path: /data/COMMERCE_INTERNAL_BASE_URL
+        value: https://commerce-api.doro-alpha.svc.cluster.local:8082
+      - op: add
+        path: /data/PAYMENT_COMMERCE_EVENTS_QUEUE_URL
+        value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-commerce-events.fifo
+      - op: add
+        path: /data/PAYMENT_AUDIT_EVENTS_QUEUE_URL
+        value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-audit-events.fifo
+  - target:
+      kind: ConfigMap
+      name: queue-api-runtime
+    patch: |-
+      - op: add
+        path: /data/QUEUE_DB_URL
+        value: jdbc:postgresql://doro-erp-dev-postgres.cnqmcq6uwqa3.ap-northeast-2.rds.amazonaws.com:5432/queue_db?sslmode=require
+      - op: add
+        path: /data/SPRING_FLYWAY_ENABLED
+        value: "false"
+      - op: add
+        path: /data/QUEUE_ORDER_EVENTS_QUEUE_URL
+        value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-queue-events.fifo
+      - op: add
+        path: /data/QUEUE_AUDIT_OUTBOX_QUEUE_URL
+        value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-audit-events.fifo
+  - target:
+      kind: ConfigMap
+      name: audit-api-runtime
+    patch: |-
+      - op: add
+        path: /data/AUDIT_SQS_STANDARD_QUEUE_NAME
+        value: doro-erp-dev-alpha-audit-events.fifo
+      - op: add
+        path: /data/AUDIT_DLQ_QUEUE_NAME
+        value: doro-erp-dev-alpha-audit-events-dlq.fifo
 images:
   - name: doro-erp-edge
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-edge

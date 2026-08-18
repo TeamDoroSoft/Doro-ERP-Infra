@@ -48,6 +48,11 @@ output "service_secret_arns" {
   value       = { for name, secret in aws_secretsmanager_secret.service : name => secret.arn }
 }
 
+output "migration_secret_arns" {
+  description = "Secrets Manager ARNs for the four PostgreSQL migration credentials."
+  value       = { for name, secret in aws_secretsmanager_secret.migration : name => secret.arn }
+}
+
 output "internal_hmac_secret_arns" {
   description = "Direction-scoped internal HMAC Secrets."
   value       = { for name, secret in aws_secretsmanager_secret.internal_hmac : name => secret.arn }

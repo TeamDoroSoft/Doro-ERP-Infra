@@ -83,3 +83,11 @@ resource "aws_iam_role" "workload" {
   assume_role_policy   = data.aws_iam_policy_document.pod_identity_assume.json
   permissions_boundary = local.workload_boundary_arn
 }
+
+resource "aws_iam_role" "migration" {
+  for_each = local.migration_app_names
+
+  name                 = "${local.name_prefix}-${each.key}-migration"
+  assume_role_policy   = data.aws_iam_policy_document.pod_identity_assume.json
+  permissions_boundary = local.workload_boundary_arn
+}

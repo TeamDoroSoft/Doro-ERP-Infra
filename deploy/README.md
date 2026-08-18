@@ -15,6 +15,8 @@ deploy/
 │  └─ audit-api/
 ├─ components/
 │  └─ secrets-manager/
+├─ migrations/
+│  └─ dev-alpha/
 ├─ platform/
 │  └─ aws-load-balancer-controller/
 └─ overlays/
@@ -34,15 +36,17 @@ Dev Alpha Overlay는 여섯 Base를 `doro-alpha` Namespace에 배치하고
 
 ## 현재 적용 가능 범위
 
-Manifest 구조와 Secrets Manager 연결은 구현되어 있지만, EKS에 적용할 Release 값은 아직 완성되지 않았다.
+Manifest 구조, Runtime 설정, Secrets Manager 연결과 PostgreSQL Migration Job은 구현되어 있지만,
+EKS에 적용할 Image Tag와 내부 TLS Release 값은 아직 완성되지 않았다.
 
 - Image Tag는 의도적으로 `unconfigured`다. ECR에 Push된 Git SHA 또는 Digest로 교체해야 한다.
-- RDS PostgreSQL URL, Redis Endpoint, MongoDB 연결과 SQS Queue URL을 환경 Overlay에 추가해야 한다.
+- Dev Alpha Overlay에는 RDS PostgreSQL URL, Redis Endpoint와 SQS Queue 값이 구성되어 있다. MongoDB URI는 Audit Secret에서 주입한다.
 - `prod` Profile의 서비스 간 호출은 HTTPS를 요구한다. 내부 TLS 인증서와 JVM TrustStore 주입을 먼저 구현해야 한다.
 - NetworkPolicy, PodDisruptionBudget, HPA와 Argo CD Application은 아직 포함하지 않는다.
-- PostgreSQL Flyway Migration Credential과 Runtime Credential을 분리하는 배포 절차가 필요하다.
+- PostgreSQL Flyway Migration Credential과 Runtime Credential은 분리되어 있다. 실제 Credential 입력과 Migration Image Push가 필요하다.
 
-이 조건을 채우기 전에 Application Overlay를 `kubectl apply`하거나 Argo CD Sync하지 않는다.
+Image Tag와 내부 TLS 조건을 채우고 `deploy/migrations/README.md`의 네 Job이 모두 성공하기 전에
+Application Overlay를 `kubectl apply`하거나 Argo CD Sync하지 않는다.
 Controller IAM·Helm과 IngressClass는 Application Release보다 먼저 준비할 수 있다.
 
 ## 기본 동작
@@ -99,6 +103,7 @@ Dev Alpha 결과에는 다음이 포함되어야 한다.
 - SecretProviderClass 6개
 - 각 Deployment의 ConfigMap `envFrom`과 서비스별 Runtime Secret `envFrom`
 - 각 Deployment의 Secrets Store CSI Volume
+- PostgreSQL 사용 Deployment 4개의 `SPRING_FLYWAY_ENABLED=false`
 
 Secret 원문은 렌더링 결과나 Git에 포함되지 않아야 한다.
 
@@ -116,3 +121,7 @@ images:
 `GIT_SHA`는 설명용 자리표시자다. 배포에서는 ECR에 존재하는 불변 Tag나 Digest만 사용한다.
 
 일반 설정은 ConfigMap Patch로, Credential과 HMAC Key는 AWS Secrets Manager로 전달한다. 실제 Secret 값과 값이 채워진 환경 파일은 커밋하지 않는다.
+
+PostgreSQL Schema 변경은 Runtime Deployment가 수행하지 않는다. 서비스 SQL로 만든 Migration
+Image와 별도 Credential을 사용하는 네 Kubernetes Job의 구성·실행 방법은
+[`migrations/README.md`](migrations/README.md)를 따른다.
