@@ -183,3 +183,17 @@ resource "aws_eks_pod_identity_association" "workload" {
     aws_eks_addon.secrets_store_csi
   ]
 }
+
+resource "aws_eks_pod_identity_association" "migration" {
+  for_each = local.migration_app_names
+
+  cluster_name    = aws_eks_cluster.this.name
+  namespace       = "doro-alpha"
+  service_account = "${each.key}-migration"
+  role_arn        = aws_iam_role.migration[each.key].arn
+
+  depends_on = [
+    aws_eks_addon.pod_identity_agent,
+    aws_eks_addon.secrets_store_csi
+  ]
+}

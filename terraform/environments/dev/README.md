@@ -9,7 +9,7 @@
 - EKS 1.35, 단일 `t4g.large` Managed Node Group, EKS Access Entry
 - EKS Worker Node SSM과 Private `t4g.micro` 관리 EC2
 - 6개 ECR Repository
-- RDS PostgreSQL 17.10, SQS FIFO Main/DLQ, 서비스별·방향별 Secrets Manager Container
+- RDS PostgreSQL 17.10, SQS FIFO Main/DLQ, 서비스별·방향별·DB Migration용 Secrets Manager Container
 - AWS Secrets Store CSI Provider Add-on, Secret Rotation과 Pod Identity
 - AWS Load Balancer Controller IAM Policy·Role과 Pod Identity Association
 - 비공개 Frontend S3, CloudFront, WAF, ACM, `doro.minseok.click`
@@ -154,11 +154,13 @@ psql \
   --file bootstrap-postgres.sql
 ```
 
-Script가 각 서비스 Runtime·Migration 비밀번호를 대화형으로 묻는다. 생성한 Runtime Credential과 Migration Credential은 서비스별 Secrets Manager Secret에 입력한다.
+Script가 각 서비스 Runtime·Migration 비밀번호를 대화형으로 묻는다. Runtime Credential은
+서비스별 Secret에, Migration Credential은 `doro-erp/dev/alpha/migration/{service}` 전용
+Secret에 각각 입력한다. Runtime Pod Identity는 Migration Secret을 읽을 수 없다.
 
-## 9. Application Secret 입력과 CSI 연결
+## 9. Application·Migration Secret 입력과 CSI 연결
 
-Terraform Apply 뒤 AWS Console의 Secrets Manager에서 서비스별 Secret과 방향별 HMAC Secret 값을 JSON으로 입력한다. 정확한 Key 목록과 Kustomize 연결 방법은 `deploy/components/secrets-manager/README.md`를 따른다.
+Terraform Apply 뒤 AWS Console의 Secrets Manager에서 서비스별 Secret과 방향별 HMAC Secret 값을 JSON으로 입력한다. 정확한 Runtime Key 목록은 `deploy/components/secrets-manager/README.md`, Migration 입력과 실행 순서는 `deploy/migrations/README.md`를 따른다.
 
 ```bash
 aws eks update-kubeconfig --region ap-northeast-2 --name doro-erp-dev

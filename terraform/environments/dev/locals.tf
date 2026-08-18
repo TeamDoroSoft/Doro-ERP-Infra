@@ -34,6 +34,13 @@ locals {
     "audit"
   ])
 
+  migration_app_names = toset([
+    "store-access",
+    "commerce",
+    "payment",
+    "queue"
+  ])
+
   hmac_directions = {
     edge-to-store-access     = ["edge", "store-access"]
     edge-to-audit            = ["edge", "audit"]

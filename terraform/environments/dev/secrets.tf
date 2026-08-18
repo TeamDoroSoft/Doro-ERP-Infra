@@ -14,6 +14,14 @@ resource "aws_secretsmanager_secret" "internal_hmac" {
   recovery_window_in_days = 7
 }
 
+resource "aws_secretsmanager_secret" "migration" {
+  for_each = local.migration_app_names
+
+  name                    = "doro-erp/dev/alpha/migration/${each.key}"
+  description             = "Doro ERP Dev Alpha ${each.key} PostgreSQL migration credential. Values are entered outside Terraform."
+  recovery_window_in_days = 7
+}
+
 data "aws_iam_policy_document" "workload" {
   for_each = local.app_names
 
@@ -67,4 +75,26 @@ resource "aws_iam_role_policy" "workload" {
   name   = "${local.name_prefix}-${each.key}-runtime"
   role   = aws_iam_role.workload[each.key].id
   policy = data.aws_iam_policy_document.workload[each.key].json
+}
+
+data "aws_iam_policy_document" "migration" {
+  for_each = local.migration_app_names
+
+  statement {
+    sid    = "ReadOwnMigrationSecret"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetSecretValue"
+    ]
+    resources = [aws_secretsmanager_secret.migration[each.key].arn]
+  }
+}
+
+resource "aws_iam_role_policy" "migration" {
+  for_each = local.migration_app_names
+
+  name   = "${local.name_prefix}-${each.key}-migration"
+  role   = aws_iam_role.migration[each.key].id
+  policy = data.aws_iam_policy_document.migration[each.key].json
 }
