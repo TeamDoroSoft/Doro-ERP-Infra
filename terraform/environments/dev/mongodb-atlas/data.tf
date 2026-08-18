@@ -4,21 +4,14 @@ data "aws_vpc" "team2" {
   id = local.network.vpc_id
 }
 
-data "aws_subnet" "data_a" {
-  id = local.network.data_a_subnet_id
-}
-
-data "aws_subnet" "data_c" {
-  id = local.network.data_c_subnet_id
-}
-
-data "aws_eks_cluster" "dev" {
-  name = "doro-erp-dev"
-}
-
-data "aws_security_group" "management" {
-  name   = "doro-erp-dev-management"
+data "aws_nat_gateway" "dev" {
   vpc_id = data.aws_vpc.team2.id
+  state  = "available"
+
+  filter {
+    name   = "tag:Name"
+    values = ["doro-erp-dev-nat-a"]
+  }
 }
 
 resource "terraform_data" "network_contract" {
@@ -36,11 +29,8 @@ resource "terraform_data" "network_contract" {
     }
 
     precondition {
-      condition = alltrue([
-        data.aws_subnet.data_a.vpc_id == data.aws_vpc.team2.id,
-        data.aws_subnet.data_c.vpc_id == data.aws_vpc.team2.id
-      ])
-      error_message = "The configured data subnets no longer belong to the approved team2 VPC."
+      condition     = data.aws_nat_gateway.dev.vpc_id == data.aws_vpc.team2.id && data.aws_nat_gateway.dev.public_ip != ""
+      error_message = "The doro-erp-dev-nat-a NAT Gateway must be available in the approved team2 VPC with a public IP."
     }
   }
 }

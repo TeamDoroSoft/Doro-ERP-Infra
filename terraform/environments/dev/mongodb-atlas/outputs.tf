@@ -8,17 +8,12 @@ output "atlas_cluster_name" {
   value       = mongodbatlas_advanced_cluster.this.name
 }
 
-output "atlas_private_link_id" {
-  description = "Atlas PrivateLink connection ID."
-  value       = mongodbatlas_privatelink_endpoint.this.private_link_id
+output "atlas_cluster_tier" {
+  description = "Atlas tier fixed for the presentation environment."
+  value       = "M0"
 }
 
-output "aws_vpc_endpoint_id" {
-  description = "AWS interface endpoint connected to Atlas."
-  value       = aws_vpc_endpoint.atlas.id
-}
-
-output "atlas_private_link_status" {
-  description = "Atlas-side private endpoint status."
-  value       = mongodbatlas_privatelink_endpoint.this.status
+output "atlas_database_access_cidr" {
+  description = "Only this existing team2 NAT public IP is allowed to connect to the Atlas database."
+  value       = mongodbatlas_project_ip_access_list.eks_nat.cidr_block
 }

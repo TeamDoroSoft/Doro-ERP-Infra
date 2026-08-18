@@ -37,7 +37,7 @@
 | Ingress | AWS Load Balancer Controller, Alpha IngressGroup, 내부 ALB 1개 |
 | PostgreSQL | RDS for PostgreSQL `17.10`, `db.t4g.small`, `gp3` 20 GiB, Single-AZ Instance 1개, 서비스별 Database 4개 |
 | Redis | ElastiCache for Redis OSS 7.1, Dev Alpha Store Access 전용, TLS·RBAC |
-| MongoDB | MongoDB Atlas 8.0 M10 Replica Set, Dev Alpha Audit 전용, AWS PrivateLink |
+| MongoDB | MongoDB Atlas 8.0 M0 Free, Dev Alpha Audit 전용, NAT 고정 IP `/32` 허용 |
 | Messaging | Alpha 전용 FIFO Main Queue 3개와 FIFO DLQ 3개 |
 | Container Registry | Amazon ECR, Git SHA 기반 불변 Image Tag |
 | 배포 | 초기 Kustomize 수동 적용 → 통합 안정화 후 GitHub Actions → ECR → GitOps Commit → Argo CD |
@@ -104,7 +104,7 @@ VPC·Subnet·Internet Gateway·Route Table·SSM Endpoint는 공유 기반으로 
   → CloudFront VPC Origin
   → 내부 ALB (private-app-a, private-app-c)
   → EKS Service / Pod (private-app-a)
-  → RDS·ElastiCache Redis 또는 AWS PrivateLink를 통한 MongoDB Atlas
+  → RDS·ElastiCache Redis 또는 NAT Gateway를 통한 MongoDB Atlas M0
 ```
 
 - Frontend는 S3에 배포하고 CloudFront OAC를 통해서만 제공한다.
@@ -132,9 +132,9 @@ VPC·Subnet·Internet Gateway·Route Table·SSM Endpoint는 공유 기반으로 
 - 서비스별 Deployment Replica: 1
 - 서비스별 Ingress를 동일한 Alpha IngressGroup으로 묶어 내부 ALB 1개를 공유
 - AWS 권한은 서비스별 Pod Identity로 분리
-- Redis는 Dev Alpha 전용 ElastiCache 단일 Node로, MongoDB는 Atlas M10 3-Node Replica Set으로 운영
+- Redis는 Dev Alpha 전용 ElastiCache 단일 Node로, MongoDB는 발표용 Atlas M0 Free Cluster로 운영
 
-ElastiCache는 Dev 비용 절감을 위해 단일 Node로 구성하므로 자동 Failover를 제공하지 않는다. Atlas는 3-Node Replica Set과 Cloud Backup을 사용한다. 운영 전에는 두 제품 모두 RPO·RTO, Backup 보존, Failover와 비용을 다시 확정한다.
+ElastiCache는 Dev 비용 절감을 위해 단일 Node로 구성하므로 자동 Failover를 제공하지 않는다. Atlas M0는 PrivateLink와 Cloud Backup/PIT를 제공하지 않으며 기존 NAT Gateway의 고정 공인 IP만 Database Network Access에 허용한다. 발표 데이터는 재생성 가능한 것으로 제한하고 운영 전에는 M10 이상, PrivateLink, Backup, RPO·RTO와 비용을 다시 확정한다.
 
 ## 6. 데이터와 Messaging
 
@@ -403,7 +403,7 @@ Dev 자동 Sync의 목표 정책은 `selfHeal=true`, `prune=true`다. 다만 최
 
 - AWS Load Balancer Controller
 - RDS PostgreSQL, Secrets Manager, CSI Provider와 SQS FIFO/DLQ
-- ElastiCache Redis와 MongoDB Atlas·AWS PrivateLink 전용 Terraform Stack
+- ElastiCache Redis와 MongoDB Atlas M0·NAT IP Access List 전용 Terraform Stack
 
 ### 4단계: Application 수동 통합 배포
 
@@ -449,7 +449,7 @@ Dev 구성의 코드와 배포 규칙을 재사용할 수 있으므로 전환 �
 
 - Kubernetes Service CIDR
 - RDS Backup 보존일
-- ElastiCache Snapshot 보존과 Atlas Cloud Backup·PIT 보존 기간
+- ElastiCache Snapshot 보존과 운영 Atlas Cloud Backup·PIT 보존 기간
 - 팀원별 EKS Public Endpoint 허용 CIDR
 - `doro.minseok.click`, Route 53 Hosted Zone `minseok.click`과 ACM 인증서
 - Argo CD 자체 설치 또는 EKS Managed Capability 선택과 비용

@@ -57,7 +57,7 @@ Tenant Domain
 | Frontend | Vue SPA를 S3에 배포하고 CloudFront OAC로만 접근 |
 | 관계형 데이터 | Amazon RDS for PostgreSQL, 서비스별 Database와 Role |
 | Session | Dev Alpha는 ElastiCache for Redis OSS 7.1 단일 Node, TLS·RBAC |
-| Audit | Dev Alpha는 MongoDB Atlas 8.0 M10 3-Node Replica Set, AWS PrivateLink |
+| Audit | Dev Alpha 발표 환경은 MongoDB Atlas 8.0 M0 Free, NAT 고정 IP `/32` 허용 |
 | Messaging | Cell별 SQS FIFO Main Queue 3개와 FIFO DLQ 3개 |
 | Secret | AWS Secrets Manager, EKS Pod Identity 기반 최소 권한 |
 | 관측성 | CloudWatch Log·Metric·Alarm + Application Actuator·Micrometer |
@@ -447,7 +447,7 @@ Audit Service는 Cell 내부 업무 서비스의 Audit Event를 `audit.audit_rec
 - `expiresAt` TTL Index와 조회 시 논리 만료 조건을 함께 적용한다.
 - 기본 Retention은 90일이며 기존 Document에 정책을 암묵적으로 소급하지 않는다.
 
-Dev Alpha는 MongoDB Atlas 8.0 M10 Dedicated 3-Node Replica Set으로 확정한다. Atlas는 AWS 서울 Region에 배치하고 기존 `team2` VPC의 Data Subnet 두 개에 만든 Interface Endpoint와 AWS PrivateLink로만 연결한다. Cloud Backup과 PIT를 활성화한다. Audit Database User와 `AUDIT_MONGODB_URI`는 Terraform State에 비밀번호가 남지 않도록 Atlas Console과 AWS Secrets Manager에서 별도로 주입한다. Application 기동 후 Unique·조회·TTL Index 생성과 복구 동작을 실제로 검증한다.
+Dev Alpha 발표 환경은 비용을 발생시키지 않는 MongoDB Atlas 8.0 M0 Free Cluster로 확정한다. EKS와 SSM 관리 EC2는 기존 `team2` NAT Gateway를 통해 TLS로 연결하고, Atlas Database Network Access에는 NAT의 고정 공인 IP `/32`만 허용한다. M0가 지원하지 않는 PrivateLink와 Cloud Backup/PIT는 발표 환경에서 사용하지 않으며 데이터는 재생성 가능한 Test Data로 제한한다. Audit Database User와 `AUDIT_MONGODB_URI`는 Terraform State에 비밀번호가 남지 않도록 Atlas Console과 AWS Secrets Manager에서 별도로 주입한다. Application 기동 후 Unique·조회·TTL Index 생성을 실제로 검증한다. 운영 전환 시에는 M10 이상 Dedicated Cluster, PrivateLink, Backup/PIT와 복구 목표를 별도로 적용한다.
 
 ## 9. SQS FIFO와 Cell 격리
 
