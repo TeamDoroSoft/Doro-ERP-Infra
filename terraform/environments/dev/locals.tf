@@ -45,6 +45,7 @@ locals {
     edge-to-store-access     = ["edge", "store-access"]
     edge-to-audit            = ["edge", "audit"]
     edge-to-payment          = ["edge", "payment"]
+    edge-to-commerce         = ["edge", "commerce"]
     commerce-to-store-access = ["commerce", "store-access"]
     store-access-to-commerce = ["store-access", "commerce"]
     payment-to-commerce      = ["payment", "commerce"]
