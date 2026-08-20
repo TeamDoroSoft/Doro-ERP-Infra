@@ -162,6 +162,62 @@ data "aws_iam_policy_document" "terraform_iam_management" {
   }
 
   statement {
+    sid    = "ManageTeam2DoroLoadGroup"
+    effect = "Allow"
+    actions = [
+      "iam:AddUserToGroup",
+      "iam:AttachGroupPolicy",
+      "iam:CreateGroup",
+      "iam:DeleteGroup",
+      "iam:DeleteGroupPolicy",
+      "iam:DetachGroupPolicy",
+      "iam:GetGroup",
+      "iam:GetGroupPolicy",
+      "iam:ListAttachedGroupPolicies",
+      "iam:ListGroupPolicies",
+      "iam:PutGroupPolicy",
+      "iam:RemoveUserFromGroup",
+      "iam:TagGroup",
+      "iam:UntagGroup"
+    ]
+    resources = [local.team2_doro_load_group_arn]
+  }
+
+  # Known duplicate of doro-erp-dev-github-ecr-push, imported as-is pending
+  # consolidation review. iam:CreateRole/iam:CreatePolicy are deliberately
+  # omitted: Terraform can manage or delete this pair but not recreate it.
+  # See bootstrap/doro-erp-service-ecr-publisher.tf.
+  statement {
+    sid    = "ManageDoroErpServiceEcrPublisher"
+    effect = "Allow"
+    actions = [
+      "iam:AttachRolePolicy",
+      "iam:DeleteRole",
+      "iam:DetachRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:UpdateRole",
+      "iam:UpdateRoleDescription"
+    ]
+    resources = [local.doro_erp_service_ecr_publisher_role_arn]
+  }
+
+  statement {
+    sid    = "ManageDoroErpServiceEcrPublishPolicy"
+    effect = "Allow"
+    actions = [
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicy",
+      "iam:DeletePolicyVersion",
+      "iam:SetDefaultPolicyVersion",
+      "iam:TagPolicy",
+      "iam:UntagPolicy"
+    ]
+    resources = [local.doro_erp_service_ecr_publish_policy_arn]
+  }
+
+  statement {
     sid     = "PassBoundedProjectRoles"
     effect  = "Allow"
     actions = ["iam:PassRole"]
