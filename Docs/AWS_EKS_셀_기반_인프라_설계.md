@@ -6,7 +6,7 @@
 >
 > 기준일: 2026-08-10
 >
-> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis·MongoDB Atlas 전용 Stack, 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Public Ingress가 구현되었다. Runtime Endpoint·내부 TLS·NetworkPolicy와 GitOps는 후속 범위다.
+> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis·MongoDB Atlas 전용 Stack, 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Public Ingress가 구현되었다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되었다. Runtime Endpoint·내부 TLS·NetworkPolicy, Image Tag 자동 반영과 GitOps는 후속 범위다.
 
 ## 1. 문서의 목적
 
@@ -698,7 +698,7 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 
 - S3 Vue SPA, CloudFront OAC, WAF, ACM, Route 53
 - `/api/*` VPC Origin과 내부 ALB 연결
-- GitHub Actions Image Build·ECR Push
+- GitHub Actions Image Build·ECR Push 실제 AWS 실행 검증
 - GitOps Image Tag 갱신과 Argo CD Sync
 
 ### 단계 5. Bravo 전용 Cell

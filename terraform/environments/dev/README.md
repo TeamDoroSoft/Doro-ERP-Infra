@@ -11,6 +11,7 @@
 - 6개 ECR Repository
 - RDS PostgreSQL 17.10, SQS FIFO Main/DLQ, 서비스별·방향별·DB Migration용 Secrets Manager Container
 - AWS Secrets Store CSI Provider Add-on, Secret Rotation과 Pod Identity
+- Service GitHub Actions가 OIDC로 Assume하는 ECR Image Push 전용 Role
 - AWS Load Balancer Controller IAM Policy·Role과 Pod Identity Association
 - 비공개 Frontend S3, CloudFront, WAF, ACM, `doro.minseok.click`
 
@@ -171,7 +172,26 @@ kubectl get secretproviderclass -n doro-alpha
 
 Secret 값은 Terraform Variable, Plan, Output과 Kubernetes Manifest에 넣지 않는다. `AWS_ACCESS_KEY_ID`와 `AWS_SECRET_ACCESS_KEY`는 Application Secret에 저장하지 않고 Pod Identity를 사용한다.
 
-## 10. Frontend 확인
+## 10. Service Image 게시 Workflow 연결
+
+Terraform Apply 뒤 `github_actions_ecr_push_role_arn` Output을 확인한다.
+
+```bash
+terraform output -raw github_actions_ecr_push_role_arn
+```
+
+GitHub `TeamDoroSoft/Doro-ERP-Service` 저장소에서 `dev` Environment를 만들고, 위 ARN을
+`AWS_ECR_PUSH_ROLE_ARN` Environment Variable로 등록한다. 이는 Role 식별자이며 Secret이 아니다.
+Workflow는 `environment: dev`인 Job에서만 OIDC Role을 Assume할 수 있고, Role은 이 Terraform이
+관리하는 여섯 ECR Repository의 조회·Layer Upload·Image Push 권한만 가진다.
+`dev` Environment의 Deployment Branch Rule도 `main`으로 제한한다. Workflow 역시 다른 Branch에서는
+Publish Job을 실행하지 않는다.
+
+장기 Access Key를 GitHub Secret에 등록하지 않는다. GitHub Organization 또는 AWS Account가 소유한
+`token.actions.githubusercontent.com` OIDC Provider가 먼저 존재해야 하며, 이 Stack은 기존 Provider를
+Data Source로 조회해 재사용한다.
+
+## 11. Frontend 확인
 
 Vue Build 결과를 S3에 올린 뒤 CloudFront Cache를 무효화한다.
 

@@ -10,6 +10,28 @@ variable "aws_region" {
   default     = "ap-northeast-2"
 }
 
+variable "github_service_repository" {
+  description = "GitHub owner/repository allowed to publish Service images through OIDC."
+  type        = string
+  default     = "TeamDoroSoft/Doro-ERP-Service"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_service_repository))
+    error_message = "github_service_repository must use the owner/repository form."
+  }
+}
+
+variable "github_actions_environment" {
+  description = "GitHub Environment included in the OIDC subject for ECR publication."
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+$", var.github_actions_environment))
+    error_message = "github_actions_environment must be a simple GitHub Environment name."
+  }
+}
+
 variable "eks_public_access_cidrs" {
   description = "Fixed public /32 CIDRs allowed to reach the EKS API. Set this in terraform.tfvars before plan."
   type        = list(string)
