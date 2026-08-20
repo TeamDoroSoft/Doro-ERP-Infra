@@ -25,16 +25,19 @@ patches:
     patch: |-
       - op: add
         path: /data/STORE_ACCESS_INTERNAL_BASE_URL
-        value: https://store-access-api.doro-alpha.svc.cluster.local:8081
+        value: http://store-access-api.doro-alpha.svc.cluster.local:8081
       - op: add
         path: /data/AUDIT_INTERNAL_BASE_URL
-        value: https://audit-api.doro-alpha.svc.cluster.local:8085
+        value: http://audit-api.doro-alpha.svc.cluster.local:8085
       - op: add
         path: /data/PAYMENT_INTERNAL_BASE_URL
-        value: https://payment-api.doro-alpha.svc.cluster.local:8083
+        value: http://payment-api.doro-alpha.svc.cluster.local:8083
       - op: add
         path: /data/COMMERCE_INTERNAL_BASE_URL
-        value: https://commerce-api.doro-alpha.svc.cluster.local:8082
+        value: http://commerce-api.doro-alpha.svc.cluster.local:8082
+      - op: add
+        path: /data/EDGE_ALLOW_CLUSTER_SERVICE_HTTP
+        value: "true"
   - target:
       kind: ConfigMap
       name: store-access-api-runtime
@@ -56,7 +59,10 @@ patches:
         value: "true"
       - op: add
         path: /data/COMMERCE_INTERNAL_BASE_URL
-        value: https://commerce-api.doro-alpha.svc.cluster.local:8082
+        value: http://commerce-api.doro-alpha.svc.cluster.local:8082
+      - op: add
+        path: /data/STORE_ACCESS_COMMERCE_ALLOW_CLUSTER_SERVICE_HTTP
+        value: "true"
       - op: add
         path: /data/STORE_ACCESS_AUDIT_STANDARD_QUEUE_URL
         value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-audit-events.fifo
@@ -72,10 +78,13 @@ patches:
         value: "false"
       - op: add
         path: /data/STORE_ACCESS_INTERNAL_BASE_URL
-        value: https://store-access-api.doro-alpha.svc.cluster.local:8081
+        value: http://store-access-api.doro-alpha.svc.cluster.local:8081
       - op: add
         path: /data/QUEUE_INTERNAL_BASE_URL
-        value: https://queue-api.doro-alpha.svc.cluster.local:8084
+        value: http://queue-api.doro-alpha.svc.cluster.local:8084
+      - op: add
+        path: /data/COMMERCE_STORE_ACCESS_ALLOW_CLUSTER_SERVICE_HTTP
+        value: "true"
       - op: add
         path: /data/COMMERCE_PAYMENT_EVENTS_QUEUE_URL
         value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-commerce-events.fifo
@@ -97,7 +106,10 @@ patches:
         value: "false"
       - op: add
         path: /data/COMMERCE_INTERNAL_BASE_URL
-        value: https://commerce-api.doro-alpha.svc.cluster.local:8082
+        value: http://commerce-api.doro-alpha.svc.cluster.local:8082
+      - op: add
+        path: /data/PAYMENT_COMMERCE_ELIGIBILITY_ALLOW_CLUSTER_SERVICE_HTTP
+        value: "true"
       - op: add
         path: /data/PAYMENT_COMMERCE_EVENTS_QUEUE_URL
         value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-commerce-events.fifo

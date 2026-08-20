@@ -2,7 +2,7 @@
 
 Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 운영 계약을 소유한다.
 
-> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Public Ingress가 구현되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. 실제 AWS 적용 상태는 별도로 확인해야 하며 Runtime Endpoint·내부 TLS·NetworkPolicy, Image Tag 자동 반영과 Argo CD는 후속 범위다.
+> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Edge 단일 Public Ingress가 구현되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. 실제 AWS 적용 상태는 별도로 확인해야 하며 ALB HTTPS Listener·Regional ACM 인증서·NetworkPolicy, Image Tag 자동 반영과 Argo CD는 후속 범위다.
 >
 > 목표 구조와 구현 완료를 혼동하지 않는다. 실제 인프라가 추가되면 실행 명령, 검증 명령과 복구 절차를 같은 변경에 포함한다.
 
@@ -110,7 +110,7 @@ Kubernetes Manifest의 현재 범위와 배포 전 필수 조건은 [deploy READ
 
 ## Routing과 신뢰 경계
 
-Frontend는 공개 Routing 계층을 통해 업무 API를 호출하고 Database, Redis, MongoDB와 SQS에 직접 연결하지 않는다. 목표 Routing은 Route 53→CloudFront·WAF→Cell별 내부 ALB→서비스별 Ingress이며 다음 논리 경계를 유지한다.
+Frontend는 공개 Routing 계층을 통해 업무 API를 호출하고 Database, Redis, MongoDB와 SQS에 직접 연결하지 않는다. 목표 Routing은 Route 53→CloudFront·WAF→Cell별 내부 ALB→Edge Ingress이며 다음 논리 경계를 유지한다.
 
 - 외부 TLS 종료와 API Route는 환경별로 한 진입점을 제공한다.
 - POS와 Kiosk의 공개 API 범위는 Backend 인증·인가로 최종 제한한다.
@@ -261,7 +261,7 @@ Application 코드 변경이 없는 서비스는 다시 배포하지 않을 수 
 
 ## AWS 구현 전 결정 사항
 
-AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·ALB, 서비스별 Ingress의 IngressGroup 통합은 목표 방향으로 확정했다. 실제 자원을 만들기 전에는 다음 운영 수치와 제품 선택을 확정한다.
+AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·ALB와 Edge 단일 Ingress는 목표 방향으로 확정했다. 실제 자원을 만들기 전에는 다음 운영 수치와 제품 선택을 확정한다.
 
 - RDS PostgreSQL의 Instance Class·Multi-AZ·Cell별 분리 수준
 - MongoDB Atlas 운영 Tier·PrivateLink·백업 보존·복구 목표

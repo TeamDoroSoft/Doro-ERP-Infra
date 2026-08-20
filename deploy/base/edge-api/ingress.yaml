@@ -17,14 +17,7 @@ spec:
   rules:
     - http:
         paths:
-          - path: /api/v1/payments
-            pathType: Prefix
-            backend:
-              service:
-                name: edge-api
-                port:
-                  name: http
-          - path: /api/v1/audits
+          - path: /api/v1
             pathType: Prefix
             backend:
               service:

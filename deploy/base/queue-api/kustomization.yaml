@@ -4,7 +4,6 @@ resources:
   - service-account.yaml
   - deployment.yaml
   - service.yaml
-  - ingress.yaml
 generatorOptions:
   disableNameSuffixHash: true
   labels:

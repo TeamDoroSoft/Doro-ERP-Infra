@@ -28,7 +28,7 @@ deploy/
 - `ServiceAccount`: Terraform의 EKS Pod Identity Association과 같은 이름을 사용한다.
 - `Deployment`: 독립 Image, Health Probe, Resource 요청·제한과 기본 보안 Context를 정의한다.
 - `Service`: Application Port를 노출하는 ClusterIP만 정의한다.
-- `Ingress`: 브라우저에 공개할 API Prefix만 소유한다.
+- `Ingress`: Edge Base만 브라우저에 공개할 `/api/v1` Prefix를 소유한다.
 - `ConfigMap`: Port, Region과 안전한 기본 Feature Flag를 환경 변수로 제공한다.
 
 Dev Alpha Overlay는 여섯 Base를 `doro-alpha` Namespace에 배치하고
@@ -37,15 +37,16 @@ Dev Alpha Overlay는 여섯 Base를 `doro-alpha` Namespace에 배치하고
 ## 현재 적용 가능 범위
 
 Manifest 구조, Runtime 설정, Secrets Manager 연결과 PostgreSQL Migration Job은 구현되어 있지만,
-EKS에 적용할 Image Tag와 내부 TLS Release 값은 아직 완성되지 않았다.
+EKS에 적용할 Image Tag와 NetworkPolicy는 아직 완성되지 않았다.
 
 - Image Tag는 의도적으로 `unconfigured`다. ECR에 Push된 Git SHA 또는 Digest로 교체해야 한다.
 - Dev Alpha Overlay에는 RDS PostgreSQL URL, Redis Endpoint와 SQS Queue 값이 구성되어 있다. MongoDB URI는 Audit Secret에서 주입한다.
-- `prod` Profile의 서비스 간 호출은 HTTPS를 요구한다. 내부 TLS 인증서와 JVM TrustStore 주입을 먼저 구현해야 한다.
+- 목표 경계는 CloudFront와 Internal ALB에서 각각 TLS를 종료하고, ALB 뒤 ClusterIP 구간은 HMAC과 Kubernetes Service DNS로 제한한 HTTP를 사용하는 구조다. 각 Runtime의 `*_ALLOW_CLUSTER_SERVICE_HTTP=true` opt-in 없이는 기동 시 Fail-Closed한다.
+- 현재 Terraform VPC Origin은 아직 `http-only`이므로 ALB HTTPS Listener·Regional ACM 인증서·CloudFront `https-only` 전환은 별도 배포 작업으로 남아 있다. 이 Manifest 변경만으로 ALB TLS 종료가 구현됐다고 판정하지 않는다.
 - NetworkPolicy, PodDisruptionBudget, HPA와 Argo CD Application은 아직 포함하지 않는다.
 - PostgreSQL Flyway Migration Credential과 Runtime Credential은 분리되어 있다. 실제 Credential 입력과 Migration Image Push가 필요하다.
 
-Image Tag와 내부 TLS 조건을 채우고 `deploy/migrations/README.md`의 네 Job이 모두 성공하기 전에
+Image Tag를 채우고 `deploy/migrations/README.md`의 네 Job이 모두 성공하기 전에
 Application Overlay를 `kubectl apply`하거나 Argo CD Sync하지 않는다.
 Controller IAM·Helm과 IngressClass는 Application Release보다 먼저 준비할 수 있다.
 
@@ -76,14 +77,12 @@ IngressGroup, 두 Private Application Subnet과 IP Target을 중앙에서 강제
 
 | Ingress 소유 서비스 | 공개 Prefix | 실제 Provider |
 |---|---|---|
-| Edge | `/api/v1/payments`, `/api/v1/audits` | Edge가 Session 검증 후 Payment·Audit에 내부 HMAC 전달 |
-| Store Access | `/api/v1/auth`, `/api/v1/kiosk-auth`, `/api/v1/kiosk-devices`, `/api/v1/security-history`, `/api/v1/store`, `/api/v1/employees`, `/api/v1/tables` | Store Access |
-| Commerce | `/api/v1/catalog`, `/api/v1/orders`, `/api/v1/sales` | Commerce |
-| Queue | `/api/v1/queues` | Queue |
+| Edge | `/api/v1` | Edge에 명시 등록된 Login·본인 비밀번호 변경·Catalog menu·Order·Payment·Audit만 각 Provider로 전달하고 나머지는 Fail-Closed |
 
-Payment와 Audit은 직접적인 Public Ingress를 갖지 않는다. Payment 공개 계약은 Edge가
-세션을 확인하고 서명해서 전달하며 Audit은 `/internal/v1/audits`만 제공한다. 두 서비스를
-직접 ALB에 연결하면 Payment의 Edge 인증 경계를 우회하거나 Audit Route가 동작하지 않는다.
+업무 Module은 직접적인 Public Ingress를 갖지 않는다. Payment 공개 계약은 Edge가
+세션을 확인하고 서명해서 전달하며 Audit은 `/internal/v1/audits`만 제공한다. Module을
+직접 ALB에 연결하면 Edge 인증 경계를 우회한다. 아직 승인되지 않은 Kiosk·Table·Queue·관리용 Catalog Route는 Edge에서도 열지 않는다.
+Login·본인 비밀번호 Route는 Runtime과 테스트가 존재하지만 정본 OpenAPI·계약 ID 승인이 남아 있어 `DEPLOYMENT_VERIFIED`로 판정하지 않는다.
 `/internal/**`와 `/actuator/**`도 Ingress에 등록하지 않는다.
 
 ## 렌더링 검증
@@ -99,7 +98,7 @@ Dev Alpha 결과에는 다음이 포함되어야 한다.
 
 - Namespace 1개
 - ServiceAccount, ConfigMap, Service, Deployment 각각 6개
-- 공개 Ingress 4개
+- 공개 Ingress 1개(Edge)
 - SecretProviderClass 6개
 - 각 Deployment의 ConfigMap `envFrom`과 서비스별 Runtime Secret `envFrom`
 - 각 Deployment의 Secrets Store CSI Volume
