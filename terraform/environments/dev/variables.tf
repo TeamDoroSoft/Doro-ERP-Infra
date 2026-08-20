@@ -21,6 +21,28 @@ variable "github_service_repository" {
   }
 }
 
+variable "github_service_repository_owner_id" {
+  description = "Immutable numeric GitHub organization ID included in the Service repository OIDC subject."
+  type        = string
+  default     = "305760709"
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*$", var.github_service_repository_owner_id))
+    error_message = "github_service_repository_owner_id must be a positive numeric GitHub organization ID."
+  }
+}
+
+variable "github_service_repository_id" {
+  description = "Immutable numeric GitHub repository ID included in the Service repository OIDC subject."
+  type        = string
+  default     = "1314731823"
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*$", var.github_service_repository_id))
+    error_message = "github_service_repository_id must be a positive numeric GitHub repository ID."
+  }
+}
+
 variable "github_actions_environment" {
   description = "GitHub Environment included in the OIDC subject for ECR publication."
   type        = string

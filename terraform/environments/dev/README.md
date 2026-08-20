@@ -184,6 +184,13 @@ GitHub `TeamDoroSoft/Doro-ERP-Service` 저장소에서 `dev` Environment를 만�
 `AWS_ECR_PUSH_ROLE_ARN` Environment Variable로 등록한다. 이는 Role 식별자이며 Secret이 아니다.
 Workflow는 `environment: dev`인 Job에서만 OIDC Role을 Assume할 수 있고, Role은 이 Terraform이
 관리하는 여섯 ECR Repository의 조회·Layer Upload·Image Push 권한만 가진다.
+Trust Policy의 Subject는 이름 재사용에도 다른 저장소가 권한을 얻지 못하도록 GitHub Organization ID
+`305760709`와 Repository ID `1314731823`을 포함한 다음 immutable 값으로 고정한다.
+
+```text
+repo:TeamDoroSoft@305760709/Doro-ERP-Service@1314731823:environment:dev
+```
+
 `dev` Environment의 Deployment Branch Rule도 `main`으로 제한한다. Workflow 역시 다른 Branch에서는
 Publish Job을 실행하지 않는다.
 

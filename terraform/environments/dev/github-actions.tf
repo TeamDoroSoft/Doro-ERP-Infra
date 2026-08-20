@@ -2,6 +2,17 @@ data "aws_iam_openid_connect_provider" "github_actions" {
   url = "https://token.actions.githubusercontent.com"
 }
 
+locals {
+  github_service_repository_parts = split("/", var.github_service_repository)
+  github_service_oidc_repository = format(
+    "%s@%s/%s@%s",
+    local.github_service_repository_parts[0],
+    var.github_service_repository_owner_id,
+    local.github_service_repository_parts[1],
+    var.github_service_repository_id
+  )
+}
+
 data "aws_iam_policy_document" "github_actions_ecr_assume" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -21,7 +32,7 @@ data "aws_iam_policy_document" "github_actions_ecr_assume" {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${var.github_service_repository}:environment:${var.github_actions_environment}"
+        "repo:${local.github_service_oidc_repository}:environment:${var.github_actions_environment}"
       ]
     }
   }

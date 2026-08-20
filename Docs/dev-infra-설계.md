@@ -175,7 +175,7 @@ Terraform을 직접 실행하는 팀원은 공유 Access Key를 사용하지 않
 - 현재 Bootstrap Principal: `arn:aws:iam::727646470302:user/b-student-05`
 - Trust Policy: 최초에는 현재 Bootstrap Principal만 Assume을 허용하고, Terraform을 직접 실행할 팀원이 생길 때 해당 Principal ARN을 추가
 - Permission Policy: 이 문서의 Dev 자원 생성·조회·변경·삭제 범위로 제한
-- GitHub Actions: Account에 등록된 `token.actions.githubusercontent.com` OIDC Provider를 재사용하고 프로젝트 전용 Role을 생성한다. 장기 Access Key를 사용하지 않으며 `TeamDoroSoft`의 Doro ERP Repository와 승인 Branch·Environment로 Subject를 제한한다.
+- GitHub Actions: Account에 등록된 `token.actions.githubusercontent.com` OIDC Provider를 재사용하고 프로젝트 전용 Role을 생성한다. 장기 Access Key를 사용하지 않으며 GitHub Organization ID `305760709`, Service Repository ID `1314731823`과 `dev` Environment를 포함한 immutable Subject로 신원을 제한한다.
 - Terraform State: `doro-erp-dev-tfstate-727646470302-ap-northeast-2` S3 Bucket에 Versioning과 암호화를 적용하고 S3 Lockfile 사용
 - Credential, Secret 원문, `.env`는 Git과 Terraform 변수 기본값에 저장하지 않음
 

@@ -1,6 +1,6 @@
 # Terraform Bootstrap
 
-이 Stack은 Doro ERP Dev Terraform State Bucket과 실행 IAM Role을 만든다. AWS Account에 이미 있는 GitHub Actions OIDC Provider는 조회해 재사용한다.
+이 Stack은 Doro ERP Dev Terraform State Bucket과 실행 IAM Role을 만든다. AWS Account에 이미 있는 GitHub Actions OIDC Provider는 조회해 재사용한다. ECR Push Role의 신뢰 관계는 GitHub Organization ID `305760709`, Service Repository ID `1314731823`과 `dev` Environment를 포함한 immutable Subject로 제한한다.
 
 ## 최초 Bootstrap
 
