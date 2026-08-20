@@ -63,6 +63,11 @@ output "ecr_repository_urls" {
   value       = { for name, repository in aws_ecr_repository.app : name => repository.repository_url }
 }
 
+output "github_actions_ecr_push_role_arn" {
+  description = "OIDC role ARN to register as the Service repository dev Environment variable AWS_ECR_PUSH_ROLE_ARN."
+  value       = aws_iam_role.github_actions_ecr_push.arn
+}
+
 output "frontend_bucket_name" {
   description = "Private S3 bucket for the Vue SPA."
   value       = aws_s3_bucket.frontend.id

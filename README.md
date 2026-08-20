@@ -2,7 +2,7 @@
 
 Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 운영 계약을 소유한다.
 
-> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Public Ingress가 구현되어 있다. 실제 AWS 적용 상태는 별도로 확인해야 하며 Runtime Endpoint·내부 TLS·NetworkPolicy·Argo CD와 CI/CD는 후속 범위다.
+> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Public Ingress가 구현되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. 실제 AWS 적용 상태는 별도로 확인해야 하며 Runtime Endpoint·내부 TLS·NetworkPolicy, Image Tag 자동 반영과 Argo CD는 후속 범위다.
 >
 > 목표 구조와 구현 완료를 혼동하지 않는다. 실제 인프라가 추가되면 실행 명령, 검증 명령과 복구 절차를 같은 변경에 포함한다.
 
@@ -69,7 +69,8 @@ cd ../Doro-ERP-Service
 ./gradlew :apps:audit-api:bootBuildImage --imageName=REGISTRY/doro-erp-audit:GIT_SHA
 ```
 
-위 `REGISTRY`와 `GIT_SHA`는 설명용 자리표시자다. 실제 Registry·Tag 전달 방식은 CI Workflow를 구현할 때 명시한다.
+위 `REGISTRY`와 `GIT_SHA`는 로컬 명령을 위한 설명용 자리표시자다. 실제 게시에서는 Service 저장소의
+`.github/workflows/publish-ecr.yml`이 ECR Registry와 전체 Git SHA Tag를 전달한다.
 
 ## 저장소 구조
 
