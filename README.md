@@ -2,7 +2,7 @@
 
 Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 운영 계약을 소유한다.
 
-> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Edge 단일 Public Ingress가 구현되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. 실제 AWS 적용 상태는 별도로 확인해야 하며 ALB HTTPS Listener·Regional ACM 인증서·NetworkPolicy, Image Tag 자동 반영과 Argo CD는 후속 범위다.
+> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값, Edge 단일 Public Ingress와 Dev Alpha NetworkPolicy가 구현되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. ALB HTTPS Listener·Regional ACM 인증서와 CloudFront HTTPS VPC Origin 구성도 코드에 반영되어 있지만 실제 AWS Listener·인증서 연결 및 CNI Policy Enforcement 상태는 별도로 확인해야 한다. Image Tag 자동 반영과 Argo CD는 후속 범위다.
 >
 > 목표 구조와 구현 완료를 혼동하지 않는다. 실제 인프라가 추가되면 실행 명령, 검증 명령과 복구 절차를 같은 변경에 포함한다.
 
@@ -266,7 +266,7 @@ AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·ALB와 Edge 단�
 - RDS PostgreSQL의 Instance Class·Multi-AZ·Cell별 분리 수준
 - MongoDB Atlas 운영 Tier·PrivateLink·백업 보존·복구 목표
 - ElastiCache Redis Multi-AZ·Failover와 Session 가용성 목표
-- EKS Node Group Size·Replica·HPA·NetworkPolicy 구현 방식
+- EKS Node Group Size·Replica·HPA와 운영 후보 NetworkPolicy 검증 방식
 - 운영 후보 환경의 Secret Rotation 자동 Rollout 방식
 - CloudWatch 중심 관측 범위와 비용 한도
 - RPO·RTO, Backup 보존, Release·Rollback 전략

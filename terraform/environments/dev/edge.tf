@@ -37,6 +37,27 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_origin_request_policy" "api" {
+  name    = "${local.name_prefix}-alpha-api"
+  comment = "Forward API cookies, queries, and viewer headers except Host to preserve ALB origin TLS validation."
+
+  cookies_config {
+    cookie_behavior = "all"
+  }
+
+  headers_config {
+    header_behavior = "allExcept"
+
+    headers {
+      items = ["host"]
+    }
+  }
+
+  query_strings_config {
+    query_string_behavior = "all"
+  }
+}
+
 resource "aws_security_group" "alpha_alb_frontend" {
   name        = "${local.name_prefix}-alpha-alb"
   description = "Allow CloudFront VPC origin traffic to the Dev Alpha internal ALB."
@@ -49,10 +70,10 @@ resource "aws_security_group" "alpha_alb_frontend" {
 
 resource "aws_vpc_security_group_ingress_rule" "alpha_alb_from_cloudfront" {
   security_group_id = aws_security_group.alpha_alb_frontend.id
-  description       = "HTTP from the CloudFront origin-facing managed prefix list"
+  description       = "HTTPS from the CloudFront origin-facing managed prefix list"
   ip_protocol       = "tcp"
-  from_port         = 80
-  to_port           = 80
+  from_port         = 443
+  to_port           = 443
   prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront_origin_facing.id
 }
 
@@ -68,9 +89,9 @@ resource "aws_cloudfront_vpc_origin" "alpha_alb" {
     arn                    = data.aws_lb.alpha.arn
     http_port              = 80
     https_port             = 443
-    origin_protocol_policy = "http-only"
+    origin_protocol_policy = "https-only"
 
-    # The provider requires this block even when the selected policy is HTTP-only.
+    # CloudFront permits only TLS 1.2 when connecting to the ALB origin.
     origin_ssl_protocols {
       items    = ["TLSv1.2"]
       quantity = 1
@@ -116,14 +137,36 @@ resource "aws_acm_certificate" "frontend" {
   }
 }
 
-resource "aws_route53_record" "certificate_validation" {
-  for_each = {
-    for option in aws_acm_certificate.frontend.domain_validation_options : option.domain_name => {
-      name   = option.resource_record_name
-      record = option.resource_record_value
-      type   = option.resource_record_type
-    }
+resource "aws_acm_certificate" "alpha_alb" {
+  domain_name       = var.alb_origin_domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
   }
+}
+
+locals {
+  edge_certificate_validation_options = merge(
+    {
+      for option in aws_acm_certificate.frontend.domain_validation_options : option.domain_name => {
+        name   = option.resource_record_name
+        record = option.resource_record_value
+        type   = option.resource_record_type
+      }
+    },
+    {
+      for option in aws_acm_certificate.alpha_alb.domain_validation_options : option.domain_name => {
+        name   = option.resource_record_name
+        record = option.resource_record_value
+        type   = option.resource_record_type
+      }
+    }
+  )
+}
+
+resource "aws_route53_record" "certificate_validation" {
+  for_each = local.edge_certificate_validation_options
 
   zone_id = data.aws_route53_zone.public.zone_id
   name    = each.value.name
@@ -136,7 +179,24 @@ resource "aws_acm_certificate_validation" "frontend" {
   provider = aws.us_east_1
 
   certificate_arn         = aws_acm_certificate.frontend.arn
-  validation_record_fqdns = [for record in aws_route53_record.certificate_validation : record.fqdn]
+  validation_record_fqdns = [aws_route53_record.certificate_validation[var.domain_name].fqdn]
+}
+
+resource "aws_acm_certificate_validation" "alpha_alb" {
+  certificate_arn         = aws_acm_certificate.alpha_alb.arn
+  validation_record_fqdns = [aws_route53_record.certificate_validation[var.alb_origin_domain_name].fqdn]
+}
+
+resource "aws_route53_record" "alpha_alb_origin" {
+  zone_id = data.aws_route53_zone.public.zone_id
+  name    = var.alb_origin_domain_name
+  type    = "A"
+
+  alias {
+    name                   = data.aws_lb.alpha.dns_name
+    zone_id                = data.aws_lb.alpha.zone_id
+    evaluate_target_health = true
+  }
 }
 
 resource "aws_wafv2_web_acl" "frontend" {
@@ -194,7 +254,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   origin {
-    domain_name = data.aws_lb.alpha.dns_name
+    domain_name = var.alb_origin_domain_name
     origin_id   = "backend-alb"
 
     vpc_origin_config {
@@ -237,7 +297,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     compress               = true
 
     cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.api.id
   }
 
   restrictions {
@@ -252,7 +312,11 @@ resource "aws_cloudfront_distribution" "frontend" {
     minimum_protocol_version = "TLSv1.2_2021"
   }
 
-  depends_on = [aws_s3_bucket_public_access_block.frontend]
+  depends_on = [
+    aws_acm_certificate_validation.alpha_alb,
+    aws_route53_record.alpha_alb_origin,
+    aws_s3_bucket_public_access_block.frontend
+  ]
 }
 
 data "aws_iam_policy_document" "frontend_bucket" {

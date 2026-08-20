@@ -82,3 +82,13 @@ output "backend_api_base_url" {
   description = "Dev Alpha API base URL routed by CloudFront to the internal ALB."
   value       = "https://${var.domain_name}/api"
 }
+
+output "alb_origin_certificate_arn" {
+  description = "Regional ACM certificate discovered by the ALB Controller for its HTTPS listener."
+  value       = aws_acm_certificate_validation.alpha_alb.certificate_arn
+}
+
+output "alb_origin_hostname" {
+  description = "TLS-validated CloudFront VPC origin hostname for the internal ALB."
+  value       = var.alb_origin_domain_name
+}

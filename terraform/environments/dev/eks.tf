@@ -131,8 +131,22 @@ resource "aws_eks_node_group" "alpha" {
     aws_route.private_app_default,
     aws_vpc_endpoint.s3,
     aws_vpc_endpoint.interface,
-    aws_iam_role_policy_attachment.eks_node
+    aws_iam_role_policy_attachment.eks_node,
+    aws_eks_addon.vpc_cni
   ]
+}
+
+resource "aws_eks_addon" "vpc_cni" {
+  cluster_name  = aws_eks_cluster.this.name
+  addon_name    = "vpc-cni"
+  addon_version = data.aws_eks_addon_version.vpc_cni.version
+
+  configuration_values = jsonencode({
+    enableNetworkPolicy = "true"
+  })
+
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "PRESERVE"
 }
 
 resource "aws_eks_addon" "pod_identity_agent" {

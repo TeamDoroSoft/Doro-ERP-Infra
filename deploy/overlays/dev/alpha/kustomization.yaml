@@ -4,6 +4,7 @@ namespace: doro-alpha
 resources:
   - ../../../base
   - namespace.yaml
+  - network-policies.yaml
 components:
   - ../../../components/secrets-manager
 patches:
@@ -19,6 +20,17 @@ patches:
       - op: add
         path: /metadata/annotations/alb.ingress.kubernetes.io~1manage-backend-security-group-rules
         value: "true"
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1listen-ports
+        value: '[{"HTTPS":443}]'
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1ssl-policy
+        value: ELBSecurityPolicy-TLS13-1-2-2021-06
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - origin.doro.minseok.click
   - target:
       kind: ConfigMap
       name: edge-api-runtime

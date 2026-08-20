@@ -37,13 +37,14 @@ Dev Alpha Overlay는 여섯 Base를 `doro-alpha` Namespace에 배치하고
 ## 현재 적용 가능 범위
 
 Manifest 구조, Runtime 설정, Secrets Manager 연결과 PostgreSQL Migration Job은 구현되어 있지만,
-EKS에 적용할 Image Tag와 NetworkPolicy는 아직 완성되지 않았다.
+EKS에 적용할 Image Tag는 아직 완성되지 않았다. Dev Alpha NetworkPolicy는 포함되어 있지만
+실제 CNI Enforcement와 Packet Test 전에는 격리 완료로 판정하지 않는다.
 
 - Image Tag는 의도적으로 `unconfigured`다. ECR에 Push된 Git SHA 또는 Digest로 교체해야 한다.
 - Dev Alpha Overlay에는 RDS PostgreSQL URL, Redis Endpoint와 SQS Queue 값이 구성되어 있다. MongoDB URI는 Audit Secret에서 주입한다.
 - 목표 경계는 CloudFront와 Internal ALB에서 각각 TLS를 종료하고, ALB 뒤 ClusterIP 구간은 HMAC과 Kubernetes Service DNS로 제한한 HTTP를 사용하는 구조다. 각 Runtime의 `*_ALLOW_CLUSTER_SERVICE_HTTP=true` opt-in 없이는 기동 시 Fail-Closed한다.
-- 현재 Terraform VPC Origin은 아직 `http-only`이므로 ALB HTTPS Listener·Regional ACM 인증서·CloudFront `https-only` 전환은 별도 배포 작업으로 남아 있다. 이 Manifest 변경만으로 ALB TLS 종료가 구현됐다고 판정하지 않는다.
-- NetworkPolicy, PodDisruptionBudget, HPA와 Argo CD Application은 아직 포함하지 않는다.
+- CloudFront VPC Origin은 전용 `origin.doro.minseok.click` 이름과 Regional ACM 인증서를 사용해 내부 ALB의 HTTPS 443 Listener에 연결한다. ALB에서 TLS를 종료한 뒤 Edge ClusterIP Target에는 HTTP로 전달한다.
+- PodDisruptionBudget, HPA와 Argo CD Application은 아직 포함하지 않는다.
 - PostgreSQL Flyway Migration Credential과 Runtime Credential은 분리되어 있다. 실제 Credential 입력과 Migration Image Push가 필요하다.
 
 Image Tag를 채우고 `deploy/migrations/README.md`의 네 Job이 모두 성공하기 전에
@@ -74,6 +75,11 @@ AWS Load Balancer Controller는 AWS 공식 Helm Chart `3.5.0`으로 설치하며
 Base의 `doro-cell-alb`는 재사용용 논리 이름이며 Dev Alpha Overlay가 이를
 `doro-alpha-alb`로 교체한다. `IngressClassParams`가 내부 ALB, `doro-alpha`
 IngressGroup, 두 Private Application Subnet과 IP Target을 중앙에서 강제한다.
+Edge Ingress의 `tls.hosts`는 AWS Load Balancer Controller가 Regional ACM 인증서를
+자동 탐색하기 위한 값이다. CloudFront의 API Origin Request Policy는 요청의 Cookie·Query·나머지 Header를 보존하되
+Viewer `Host`만 Origin 이름으로 교체한다. 따라서 전용 Origin 인증서 이름과 TLS 검증이
+일치하고, Host가 없는 `/api/v1` Rule이 요청을 수용한다. ALB Security Group은 CloudFront
+Origin-Facing Prefix List의 TCP 443만 허용한다.
 
 | Ingress 소유 서비스 | 공개 Prefix | 실제 Provider |
 |---|---|---|
@@ -105,6 +111,51 @@ Dev Alpha 결과에는 다음이 포함되어야 한다.
 - PostgreSQL 사용 Deployment 4개의 `SPRING_FLYWAY_ENABLED=false`
 
 Secret 원문은 렌더링 결과나 Git에 포함되지 않아야 한다.
+
+## Dev Alpha NetworkPolicy
+
+Dev Alpha Overlay는 `app.kubernetes.io/component`가 `edge` 또는 `application`인 여섯
+Runtime Pod에 Ingress와 Egress 기본 거부를 적용한다. 허용 행렬은 다음과 같다.
+
+| 출발지 | 목적지 | TCP Port | 용도 |
+|---|---|---:|---|
+| Dev VPC `10.24.0.0/16` | Edge | 8080 | IP Target ALB 요청과 Health Check |
+| Edge | Store Access / Commerce / Payment / Audit | 8081 / 8082 / 8083 / 8085 | 공개 Route의 승인된 내부 Provider 호출 |
+| Store Access | Commerce | 8082 | Store Access가 소유한 Commerce 내부 호출 |
+| Commerce | Store Access / Queue | 8081 / 8084 | Context 조회와 Fulfillment 호출 |
+| Payment | Commerce | 8082 | 주문·금액·결제 가능 상태 확인 |
+| 모든 Application | CoreDNS | TCP·UDP 53 | Service와 외부 Endpoint DNS 조회 |
+| 모든 Application | EKS Pod Identity Agent `169.254.170.23/32` | 80 | Pod Identity Credential 조회 |
+| Store Access | Dev VPC | 5432 / 6379 / 443 | PostgreSQL / Redis / SQS PrivateLink |
+| Commerce, Queue | Dev VPC | 5432 / 443 | PostgreSQL / SQS PrivateLink |
+| Payment | Dev VPC / 외부 | 5432 / 443 | PostgreSQL / SQS PrivateLink와 Toss Test HTTPS |
+| Audit | Dev VPC / 외부 | 443 / 27017 | SQS PrivateLink / MongoDB Atlas SRV Target |
+
+Kubernetes NetworkPolicy는 FQDN이나 AWS Security Group을 목적지 Selector로 사용할 수
+없다. 따라서 ALB IP Target의 Source와 RDS·ElastiCache·Interface Endpoint는 현재 Dev
+VPC CIDR로 제한하며, 세부 Resource 격리는 각 Resource Security Group과 Pod Identity
+IAM이 담당한다. ALB 허용 규칙은 같은 VPC의 다른 Source도 Edge 8080에 도달할 수 있으므로
+ALB Security Group의 Backend 규칙을 함께 유지해야 한다.
+
+Toss와 Atlas의 IP는 Provider가 변경할 수 있어 Payment의 외부 TCP 443과 Audit의 외부
+TCP 27017을 VPC·Kubernetes Service CIDR 밖의 전체 IPv4로 허용했다. 이는 Port 단위의
+단계적 제한이며 FQDN-aware Egress Gateway 또는 CNI 정책을 도입하기 전까지 임의의 같은
+Port 목적지도 허용하는 잔여 위험이 있다. Atlas M0를 PrivateLink로 전환할 수 없다는 Dev
+설계도 이 제한의 배경이다. IPv6 Pod/Endpoint를 활성화할 때는 별도 IPv6 정책을 추가하기 전
+배포하지 않는다.
+
+Foundation Terraform은 Cluster Kubernetes Version과 호환되는 최신 Amazon VPC CNI
+Managed Add-on을 선택하고 `enableNetworkPolicy=true`로 Enforcement를 활성화한다. Plan에서
+선택된 CNI가 NetworkPolicy 지원 Version인지 확인하고, 적용 뒤에는
+허용 행렬의 연결 성공과 Edge→Queue, 업무 Module→Edge, Namespace 간 호출, 비승인 Port의
+실패를 실제 Pod에서 검증한다. Amazon VPC CNI는 선택된 Pod가 실행되는 Node에서 오는
+Kubelet Probe를 허용하므로 별도 Ingress Source를 추가하지 않는다. 이 Overlay의 Selector는
+Runtime Pod만 대상으로 하며 별도 `deploy/migrations` Job에는 적용되지 않는다. Migration
+NetworkPolicy는 Job 실행 시점과 DB Endpoint가 확정된 뒤 그 Kustomization에서 별도로 적용한다.
+
+현재 CNI는 기본 `standard` 시작 모드를 유지하므로 새 Pod에 Policy Endpoint가 준비되기 전
+짧은 기본 허용 구간이 있다. Cluster 핵심 Add-on까지 필요한 Egress 정책을 갖춘 뒤에만
+`NETWORK_POLICY_ENFORCING_MODE=strict` 전환을 별도 Rollout으로 검토한다.
 
 ## Release 값 반영
 

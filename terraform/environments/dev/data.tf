@@ -1,5 +1,11 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_eks_addon_version" "vpc_cni" {
+  addon_name         = "vpc-cni"
+  kubernetes_version = aws_eks_cluster.this.version
+  most_recent        = true
+}
+
 data "aws_vpc" "team2" {
   id = local.existing_network.vpc_id
 }
@@ -56,10 +62,6 @@ data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
 
 data "aws_cloudfront_cache_policy" "caching_disabled" {
   name = "Managed-CachingDisabled"
-}
-
-data "aws_cloudfront_origin_request_policy" "all_viewer" {
-  name = "Managed-AllViewer"
 }
 
 data "aws_ssm_parameter" "amazon_linux_2023_arm64" {

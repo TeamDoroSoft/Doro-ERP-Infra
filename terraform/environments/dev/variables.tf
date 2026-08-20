@@ -34,6 +34,17 @@ variable "domain_name" {
   default     = "doro.minseok.click"
 }
 
+variable "alb_origin_domain_name" {
+  description = "Dedicated DNS hostname on the Regional ACM certificate used by CloudFront for the internal ALB VPC origin."
+  type        = string
+  default     = "origin.doro.minseok.click"
+
+  validation {
+    condition     = var.alb_origin_domain_name != var.domain_name && endswith(var.alb_origin_domain_name, ".${var.hosted_zone_name}")
+    error_message = "alb_origin_domain_name must be a dedicated hostname beneath hosted_zone_name and must differ from domain_name."
+  }
+}
+
 variable "hosted_zone_name" {
   description = "Existing Route 53 public hosted zone."
   type        = string
