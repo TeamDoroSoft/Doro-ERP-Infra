@@ -37,6 +37,74 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_security_group" "alpha_alb_frontend" {
+  name        = "${local.name_prefix}-alpha-alb"
+  description = "Allow CloudFront VPC origin traffic to the Dev Alpha internal ALB."
+  vpc_id      = data.aws_vpc.team2.id
+
+  tags = {
+    Name = "${local.name_prefix}-alpha-alb"
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "alpha_alb_from_cloudfront" {
+  security_group_id = aws_security_group.alpha_alb_frontend.id
+  description       = "HTTP from the CloudFront origin-facing managed prefix list"
+  ip_protocol       = "tcp"
+  from_port         = 80
+  to_port           = 80
+  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront_origin_facing.id
+}
+
+resource "aws_vpc_security_group_egress_rule" "alpha_alb_all" {
+  security_group_id = aws_security_group.alpha_alb_frontend.id
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+resource "aws_cloudfront_vpc_origin" "alpha_alb" {
+  vpc_origin_endpoint_config {
+    name                   = "${local.name_prefix}-alpha-alb"
+    arn                    = data.aws_lb.alpha.arn
+    http_port              = 80
+    https_port             = 443
+    origin_protocol_policy = "http-only"
+
+    # The provider requires this block even when the selected policy is HTTP-only.
+    origin_ssl_protocols {
+      items    = ["TLSv1.2"]
+      quantity = 1
+    }
+  }
+
+  timeouts {
+    create = "30m"
+    update = "30m"
+    delete = "30m"
+  }
+}
+
+resource "aws_cloudfront_function" "spa_rewrite" {
+  name    = "${local.name_prefix}-alpha-spa-rewrite"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rewrite extensionless frontend routes to the SPA entry point."
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+
+      if (uri.endsWith('/')) {
+        request.uri = uri + 'index.html';
+      } else if (!uri.split('/').pop().includes('.')) {
+        request.uri = '/index.html';
+      }
+
+      return request;
+    }
+  EOT
+}
+
 resource "aws_acm_certificate" "frontend" {
   provider = aws.us_east_1
 
@@ -125,6 +193,17 @@ resource "aws_cloudfront_distribution" "frontend" {
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
+  origin {
+    domain_name = data.aws_lb.alpha.dns_name
+    origin_id   = "backend-alb"
+
+    vpc_origin_config {
+      vpc_origin_id            = aws_cloudfront_vpc_origin.alpha_alb.id
+      origin_keepalive_timeout = 5
+      origin_read_timeout      = 30
+    }
+  }
+
   default_cache_behavior {
     target_origin_id       = "frontend-s3"
     viewer_protocol_policy = "redirect-to-https"
@@ -142,12 +221,23 @@ resource "aws_cloudfront_distribution" "frontend" {
     min_ttl     = 0
     default_ttl = 300
     max_ttl     = 86400
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_rewrite.arn
+    }
   }
 
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
+  ordered_cache_behavior {
+    path_pattern           = "/api/*"
+    target_origin_id       = "backend-alb"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
   }
 
   restrictions {

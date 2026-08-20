@@ -46,6 +46,22 @@ data "aws_route53_zone" "public" {
   private_zone = false
 }
 
+data "aws_lb" "alpha" {
+  name = "${local.name_prefix}-alpha"
+}
+
+data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
+}
+
+data "aws_cloudfront_origin_request_policy" "all_viewer" {
+  name = "Managed-AllViewer"
+}
+
 data "aws_ssm_parameter" "amazon_linux_2023_arm64" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
 }

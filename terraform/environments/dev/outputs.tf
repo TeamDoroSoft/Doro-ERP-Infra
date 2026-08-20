@@ -77,3 +77,8 @@ output "frontend_url" {
   description = "Dev Alpha public frontend URL."
   value       = "https://${var.domain_name}"
 }
+
+output "backend_api_base_url" {
+  description = "Dev Alpha API base URL routed by CloudFront to the internal ALB."
+  value       = "https://${var.domain_name}/api"
+}

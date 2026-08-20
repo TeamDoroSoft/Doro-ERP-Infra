@@ -13,6 +13,12 @@ patches:
       - op: replace
         path: /spec/ingressClassName
         value: doro-alpha-alb
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1security-groups
+        value: doro-erp-dev-alpha-alb
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1manage-backend-security-group-rules
+        value: "true"
   - target:
       kind: ConfigMap
       name: edge-api-runtime
