@@ -10,50 +10,6 @@ variable "aws_region" {
   default     = "ap-northeast-2"
 }
 
-variable "github_service_repository" {
-  description = "GitHub owner/repository allowed to publish Service images through OIDC."
-  type        = string
-  default     = "TeamDoroSoft/Doro-ERP-Service"
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_service_repository))
-    error_message = "github_service_repository must use the owner/repository form."
-  }
-}
-
-variable "github_service_repository_owner_id" {
-  description = "Immutable numeric GitHub organization ID included in the Service repository OIDC subject."
-  type        = string
-  default     = "305760709"
-
-  validation {
-    condition     = can(regex("^[1-9][0-9]*$", var.github_service_repository_owner_id))
-    error_message = "github_service_repository_owner_id must be a positive numeric GitHub organization ID."
-  }
-}
-
-variable "github_service_repository_id" {
-  description = "Immutable numeric GitHub repository ID included in the Service repository OIDC subject."
-  type        = string
-  default     = "1314731823"
-
-  validation {
-    condition     = can(regex("^[1-9][0-9]*$", var.github_service_repository_id))
-    error_message = "github_service_repository_id must be a positive numeric GitHub repository ID."
-  }
-}
-
-variable "github_actions_environment" {
-  description = "GitHub Environment included in the OIDC subject for ECR publication."
-  type        = string
-  default     = "dev"
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+$", var.github_actions_environment))
-    error_message = "github_actions_environment must be a simple GitHub Environment name."
-  }
-}
-
 variable "eks_public_access_cidrs" {
   description = "Fixed public /32 CIDRs allowed to reach the EKS API. Set this in terraform.tfvars before plan."
   type        = list(string)
