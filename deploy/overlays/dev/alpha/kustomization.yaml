@@ -26,6 +26,9 @@ patches:
       - op: add
         path: /data/PAYMENT_INTERNAL_BASE_URL
         value: https://payment-api.doro-alpha.svc.cluster.local:8083
+      - op: add
+        path: /data/COMMERCE_INTERNAL_BASE_URL
+        value: https://commerce-api.doro-alpha.svc.cluster.local:8082
   - target:
       kind: ConfigMap
       name: store-access-api-runtime
