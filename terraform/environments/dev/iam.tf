@@ -63,26 +63,58 @@ resource "aws_iam_instance_profile" "management" {
   role = aws_iam_role.management_instance.name
 }
 
-data "aws_iam_policy_document" "management_eks_connect" {
+# Incident-response convenience grant (deliberate exception to least
+# privilege): full EKS control-plane access, but scoped to doro-erp-dev
+# only — never to other teams' clusters in this shared account. A separate
+# statement covers the handful of EKS actions AWS does not support
+# resource-level permissions for (list/catalog-style calls); those are
+# unavoidably account-wide but read-only.
+data "aws_iam_policy_document" "management_eks_admin" {
   statement {
-    sid       = "DescribeDoroEksCluster"
-    effect    = "Allow"
-    actions   = ["eks:DescribeCluster"]
-    resources = [aws_eks_cluster.this.arn]
+    sid    = "ManageDoroEksClusterAndSubresources"
+    effect = "Allow"
+    actions = [
+      "eks:*"
+    ]
+    resources = [
+      aws_eks_cluster.this.arn,
+      "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:*/${aws_eks_cluster.this.name}/*"
+    ]
+  }
+
+  statement {
+    sid    = "ReadEksAccountCatalog"
+    effect = "Allow"
+    actions = [
+      "eks:ListClusters",
+      "eks:ListUpdates",
+      "eks:DescribeAddonVersions"
+    ]
+    resources = ["*"]
   }
 }
 
-resource "aws_iam_role_policy" "management_eks_connect" {
-  name   = "DoroERPDevEKSConnectPolicy"
+resource "aws_iam_role_policy" "management_eks_admin" {
+  name   = "DoroERPDevEKSAdminPolicy"
   role   = aws_iam_role.management_instance.name
-  policy = data.aws_iam_policy_document.management_eks_connect.json
+  policy = data.aws_iam_policy_document.management_eks_admin.json
 }
 
-data "aws_iam_policy_document" "management_ecr_describe_images" {
+# Same rationale as above, scoped to the six doro-erp-* repositories only.
+data "aws_iam_policy_document" "management_ecr_admin" {
   statement {
-    sid     = "DescribeDoroErpImages"
-    effect  = "Allow"
-    actions = ["ecr:DescribeImages"]
+    sid       = "EcrAuthorizationToken"
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ManageDoroErpRepositories"
+    effect = "Allow"
+    actions = [
+      "ecr:*"
+    ]
     resources = [
       for app in local.app_names :
       "arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/doro-erp-${app}"
@@ -90,10 +122,10 @@ data "aws_iam_policy_document" "management_ecr_describe_images" {
   }
 }
 
-resource "aws_iam_role_policy" "management_ecr_describe_images" {
-  name   = "DoroErpEcrDescribeImages"
+resource "aws_iam_role_policy" "management_ecr_admin" {
+  name   = "DoroErpEcrAdminPolicy"
   role   = aws_iam_role.management_instance.name
-  policy = data.aws_iam_policy_document.management_ecr_describe_images.json
+  policy = data.aws_iam_policy_document.management_ecr_admin.json
 }
 
 data "aws_iam_policy_document" "pod_identity_assume" {
