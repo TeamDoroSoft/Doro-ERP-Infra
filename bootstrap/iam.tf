@@ -179,15 +179,16 @@ data "aws_iam_policy_document" "terraform_iam_management" {
     resources = [local.team2_doroload_ssm_access_policy_arn]
   }
 
-  # Known duplicate of doro-erp-dev-github-ecr-push, imported as-is pending
-  # consolidation review. iam:CreateRole/iam:CreatePolicy are deliberately
-  # omitted: Terraform can manage or delete this pair but not recreate it.
-  # See bootstrap/doro-erp-service-ecr-publisher.tf.
+  # doro-erp-service-ecr-publisher is the canonical GitHub Actions role for
+  # publishing Doro ERP service images to ECR (Doro-ERP-Service's dev
+  # Environment variable AWS_ECR_PUSH_ROLE_ARN points at it). It replaces
+  # the never-used doro-erp-dev-github-ecr-push, which has been removed.
   statement {
     sid    = "ManageDoroErpServiceEcrPublisher"
     effect = "Allow"
     actions = [
       "iam:AttachRolePolicy",
+      "iam:CreateRole",
       "iam:DeleteRole",
       "iam:DetachRolePolicy",
       "iam:TagRole",
@@ -203,6 +204,7 @@ data "aws_iam_policy_document" "terraform_iam_management" {
     sid    = "ManageDoroErpServiceEcrPublishPolicy"
     effect = "Allow"
     actions = [
+      "iam:CreatePolicy",
       "iam:CreatePolicyVersion",
       "iam:DeletePolicy",
       "iam:DeletePolicyVersion",
@@ -297,71 +299,4 @@ resource "aws_iam_role_policy" "terraform_service_linked_roles" {
 
 data "aws_iam_openid_connect_provider" "github" {
   arn = var.github_oidc_provider_arn
-}
-
-data "aws_iam_policy_document" "github_assume_role" {
-  statement {
-    sid     = "AllowDoroServiceGitHubActions"
-    effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-
-    principals {
-      type        = "Federated"
-      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:sub"
-      values   = sort(tolist(var.github_ecr_subjects))
-    }
-  }
-}
-
-resource "aws_iam_role" "github_ecr_push" {
-  name                 = local.github_ecr_role_name
-  description          = "GitHub Actions role for pushing Doro ERP backend images to ECR."
-  assume_role_policy   = data.aws_iam_policy_document.github_assume_role.json
-  max_session_duration = 3600
-  permissions_boundary = aws_iam_policy.workload_boundary.arn
-}
-
-data "aws_iam_policy_document" "github_ecr_push" {
-  statement {
-    sid       = "GetEcrAuthorizationToken"
-    effect    = "Allow"
-    actions   = ["ecr:GetAuthorizationToken"]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "PushDoroImages"
-    effect = "Allow"
-    actions = [
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:BatchGetImage",
-      "ecr:CompleteLayerUpload",
-      "ecr:DescribeImages",
-      "ecr:GetDownloadUrlForLayer",
-      "ecr:InitiateLayerUpload",
-      "ecr:ListImages",
-      "ecr:PutImage",
-      "ecr:UploadLayerPart"
-    ]
-    resources = [
-      "arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/doro-erp-*"
-    ]
-  }
-}
-
-resource "aws_iam_role_policy" "github_ecr_push" {
-  name   = "doro-erp-dev-ecr-push"
-  role   = aws_iam_role.github_ecr_push.id
-  policy = data.aws_iam_policy_document.github_ecr_push.json
 }

@@ -64,7 +64,7 @@ output "ecr_repository_urls" {
 }
 
 output "github_actions_ecr_push_role_arn" {
-  description = "OIDC role ARN to register as the Service repository dev Environment variable AWS_ECR_PUSH_ROLE_ARN."
+  description = "OIDC role ARN registered as the Service repository dev Environment variable AWS_ECR_PUSH_ROLE_ARN."
   value       = data.aws_iam_role.github_actions_ecr_push.arn
 }
 
