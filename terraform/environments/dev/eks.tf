@@ -101,10 +101,10 @@ resource "aws_eks_node_group" "alpha" {
   cluster_name           = aws_eks_cluster.this.name
   node_group_name_prefix = "${local.name_prefix}-alpha-"
   node_role_arn          = aws_iam_role.eks_node.arn
-  subnet_ids = [
-    data.aws_subnet.app_a.id,
-    data.aws_subnet.app_c.id
-  ]
+  # Dev workloads intentionally stay in AZ-a. The EKS control plane and ALB
+  # continue to use both application subnets, but worker capacity scales only
+  # inside the lower-cost single-AZ development failure domain.
+  subnet_ids = [data.aws_subnet.app_a.id]
 
   ami_type       = "AL2023_x86_64_STANDARD"
   capacity_type  = "ON_DEMAND"
@@ -117,7 +117,7 @@ resource "aws_eks_node_group" "alpha" {
 
   scaling_config {
     desired_size = 2
-    max_size     = 2
+    max_size     = 4
     min_size     = 2
   }
 
@@ -132,6 +132,10 @@ resource "aws_eks_node_group" "alpha" {
 
   lifecycle {
     create_before_destroy = true
+
+    # Cluster Autoscaler owns desired capacity after the initial two-node
+    # foundation has been created. Terraform continues to own the bounds.
+    ignore_changes = [scaling_config[0].desired_size]
   }
 
   depends_on = [

@@ -126,17 +126,20 @@ CPU Request 대비 평균 사용률 70%를 기준으로 최대 4개까지 확장
 서비스별 PodDisruptionBudget은 `maxUnavailable: 1`로 자발적 중단 중 최소 한 Replica를
 유지한다. 이는 Node 장애 같은 비자발적 중단을 막지 않으므로 실제 장애 검증을 대체하지 않는다.
 
-각 Deployment는 `topology.kubernetes.io/zone`과 `kubernetes.io/hostname`에 대해
-`maxSkew: 1`, `minDomains: 2`, `DoNotSchedule`을 사용한다. Foundation Node Group도 두
-Application Subnet과 Node 2개를 사용하므로 두 AZ의 Node가 Ready인 정상 상태에서는 서비스별
-두 Replica가 서로 다른 AZ와 Node에 배치된다. 기존 단일-AZ Node Group은 이름 Prefix와
-`create_before_destroy`를 사용하는 2-AZ Node Group으로 교체되므로 Terraform Plan에서
-신규 Node가 Ready가 된 뒤 기존 Node가 제거되는지 확인한다.
+재사용 Base의 각 Deployment는 `topology.kubernetes.io/zone`과
+`kubernetes.io/hostname`에 대해 `maxSkew: 1`, `minDomains: 2`, `DoNotSchedule`을 사용한다.
+Dev Alpha Overlay는 비용과 현재 운영 제약을 반영한 단일 AZ Workload이므로 Zone 제약만
+제거하고 Hostname `DoNotSchedule`은 유지한다. 따라서 서비스별 두 Replica는 같은
+`ap-northeast-2a` 안에서도 서로 다른 Node에 배치되며, Node가 한 대뿐이면 두 번째 Replica는
+의도적으로 Pending 상태를 유지한다.
 
 HPA의 Resource Metric은 EKS Metrics Server Community Add-on에서 제공한다. HPA가 최대
-Replica를 요청하더라도 이 구성에는 Cluster Autoscaler나 Karpenter가 없으므로 Node 여유
-용량을 넘는 Pod는 Pending이 될 수 있다. 배포 뒤 `kubectl top`, HPA Condition, Zone별 Pod
-배치와 Node Drain 중 PDB 동작을 확인하기 전에는 가용성이 검증된 것으로 판정하지 않는다.
+Replica를 요청해 Node 여유 용량을 넘으면 Cluster Autoscaler가 단일 AZ Managed Node Group을
+최소 2대에서 최대 4대까지 확장한다. 설치 값과 적용 순서는
+[`platform/cluster-autoscaler`](platform/cluster-autoscaler/README.md)를 따른다. 배포 뒤
+`kubectl top`, HPA Condition, Node별 Pod 배치, Node `2 → 4 → 2` 증감과 Drain 중 PDB 동작을
+확인하기 전에는 자동 확장과 가용성이 검증된 것으로 판정하지 않는다. 단일 AZ 구성은 해당 AZ
+장애를 견디지 못하며 운영 Multi-AZ 기준을 대체하지 않는다.
 
 ## Dev Alpha NetworkPolicy
 

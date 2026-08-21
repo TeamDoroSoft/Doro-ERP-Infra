@@ -6,12 +6,13 @@
 
 - NAT Gateway와 Private Application 기본 Route 복구
 - S3 Gateway Endpoint, ECR·Logs·Secrets Manager·SQS·STS Interface Endpoint
-- EKS 1.35, 2-AZ에 걸친 `t3.large` Managed Node 2개, EKS Access Entry
+- EKS 1.35, AZ-a의 `t3.large` Managed Node 최소 2개·최대 4개, EKS Access Entry
 - EKS Worker Node SSM과 Private `t4g.micro` 관리 EC2
 - 6개 ECR Repository
 - RDS PostgreSQL 17.10, SQS FIFO Main/DLQ, 서비스별·방향별·DB Migration용 Secrets Manager Container
 - AWS Secrets Store CSI Provider Add-on, Secret Rotation과 Pod Identity
 - Kubernetes HPA용 Metrics Server Community Add-on
+- Managed Node Group 자동 증설용 Cluster Autoscaler IAM과 Pod Identity
 - CloudWatch Observability Add-on, 14일 Container Log 보존과 Dev 운영 Alarm SNS Topic
 - Service GitHub Actions가 OIDC로 Assume하는 ECR Image Push 전용 Role
 - AWS Load Balancer Controller IAM Policy·Role과 Pod Identity Association
