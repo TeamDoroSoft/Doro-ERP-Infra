@@ -63,6 +63,39 @@ resource "aws_iam_instance_profile" "management" {
   role = aws_iam_role.management_instance.name
 }
 
+data "aws_iam_policy_document" "management_eks_connect" {
+  statement {
+    sid       = "DescribeDoroEksCluster"
+    effect    = "Allow"
+    actions   = ["eks:DescribeCluster"]
+    resources = [aws_eks_cluster.this.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "management_eks_connect" {
+  name   = "DoroERPDevEKSConnectPolicy"
+  role   = aws_iam_role.management_instance.name
+  policy = data.aws_iam_policy_document.management_eks_connect.json
+}
+
+data "aws_iam_policy_document" "management_ecr_describe_images" {
+  statement {
+    sid     = "DescribeDoroErpImages"
+    effect  = "Allow"
+    actions = ["ecr:DescribeImages"]
+    resources = [
+      for app in local.app_names :
+      "arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/doro-erp-${app}"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "management_ecr_describe_images" {
+  name   = "DoroErpEcrDescribeImages"
+  role   = aws_iam_role.management_instance.name
+  policy = data.aws_iam_policy_document.management_ecr_describe_images.json
+}
+
 data "aws_iam_policy_document" "pod_identity_assume" {
   statement {
     actions = [
