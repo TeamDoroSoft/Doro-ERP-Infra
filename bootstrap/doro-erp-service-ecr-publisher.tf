@@ -1,17 +1,11 @@
-# KNOWN DUPLICATE — pending consolidation review.
+# Canonical GitHub Actions role for publishing Doro ERP service images to
+# ECR. Doro-ERP-Service's dev Environment variable AWS_ECR_PUSH_ROLE_ARN
+# points at this role's ARN.
 #
-# This role/policy pair grants nothing that doro-erp-dev-github-ecr-push
-# (see iam.tf) does not already grant: the ECR push scope below is a strict
-# subset of that role's doro-erp-* wildcard, and the immutable GitHub OIDC
-# subject used here is already allow-listed in var.github_ecr_subjects. It
-# was created manually because the Doro-ERP-Service GitHub Actions workflow
-# could not initially resolve the existing role.
-#
-# Imported as-is to bring it under Terraform state and plan visibility. The
-# permissions granted in iam.tf deliberately omit iam:CreateRole /
-# iam:CreatePolicy, so this pair can be deleted through Terraform but not
-# recreated. Once the workflow is repointed at doro-erp-dev-github-ecr-push,
-# delete this file and the matching statements in iam.tf and locals.tf.
+# This role was originally created manually in the AWS console (the
+# now-removed doro-erp-dev-github-ecr-push had never actually been assumed),
+# then imported here as-is and confirmed as the resource actually in use.
+# See Docs/IAM_리소스_정리_및_Bootstrap_State_협의사항.md for the investigation.
 
 data "aws_iam_policy_document" "doro_erp_service_ecr_publisher_assume" {
   statement {

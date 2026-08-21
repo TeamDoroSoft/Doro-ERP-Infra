@@ -55,22 +55,3 @@ variable "github_oidc_provider_arn" {
   type        = string
   default     = "arn:aws:iam::727646470302:oidc-provider/token.actions.githubusercontent.com"
 }
-
-variable "github_ecr_subjects" {
-  description = "Immutable GitHub OIDC subject claims allowed to push backend images to ECR."
-  type        = set(string)
-  default = [
-    "repo:TeamDoroSoft@305760709/Doro-ERP-Service@1314731823:environment:dev"
-  ]
-
-  validation {
-    condition = length(var.github_ecr_subjects) > 0 && alltrue([
-      for subject in var.github_ecr_subjects :
-      can(regex(
-        "^repo:TeamDoroSoft@305760709/Doro-ERP-Service@1314731823:environment:[A-Za-z0-9_.-]+$",
-        subject
-      ))
-    ])
-    error_message = "GitHub subjects must use the immutable TeamDoroSoft/Doro-ERP-Service IDs and an explicit Environment."
-  }
-}

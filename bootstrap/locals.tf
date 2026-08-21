@@ -8,7 +8,6 @@ locals {
   }
 
   terraform_role_name                  = "doro-erp-dev-terraform"
-  github_ecr_role_name                 = "doro-erp-dev-github-ecr-push"
   workload_boundary_name               = "doro-erp-guardrail-dev"
   project_role_arn_pattern             = "arn:aws:iam::${var.aws_account_id}:role/doro-erp-dev-*"
   project_policy_arn_pattern           = "arn:aws:iam::${var.aws_account_id}:policy/doro-erp-dev-*"
@@ -17,8 +16,8 @@ locals {
 
   team2_doroload_ssm_access_policy_arn = "arn:aws:iam::${var.aws_account_id}:policy/team2-doroload-ssm-access-policy"
 
-  # Known duplicate of doro-erp-dev-github-ecr-push, imported as-is pending
-  # consolidation. See bootstrap/doro-erp-service-ecr-publisher.tf.
+  # Canonical GitHub Actions ECR push role. See
+  # bootstrap/doro-erp-service-ecr-publisher.tf.
   doro_erp_service_ecr_publisher_role_arn = "arn:aws:iam::${var.aws_account_id}:role/doro-erp-service-ecr-publisher"
   doro_erp_service_ecr_publish_policy_arn = "arn:aws:iam::${var.aws_account_id}:policy/DoroErpServiceEcrPublishPolicy"
 }

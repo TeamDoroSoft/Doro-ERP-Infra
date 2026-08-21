@@ -226,11 +226,11 @@ Secret 값은 Terraform Variable, Plan, Output과 Kubernetes Manifest에 넣지 
 
 ECR Push Role은 Bootstrap Stack이 단독으로 생성하고 Trust Policy와 권한을 관리한다. Dev Stack은
 같은 Role을 Data Source로 조회하며 새 IAM Role이나 Inline Policy를 생성하지 않는다. Bootstrap Apply 뒤
-Bootstrap Stack의 `github_ecr_push_role_arn` Output을 확인한다.
+Bootstrap Stack의 `doro_erp_service_ecr_publisher_role_arn` Output을 확인한다.
 
 ```bash
 cd ../../../bootstrap
-terraform output -raw github_ecr_push_role_arn
+terraform output -raw doro_erp_service_ecr_publisher_role_arn
 ```
 
 GitHub `TeamDoroSoft/Doro-ERP-Service` 저장소에서 `dev` Environment를 만들고, 위 ARN을

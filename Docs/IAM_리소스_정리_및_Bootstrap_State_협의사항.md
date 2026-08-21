@@ -16,37 +16,49 @@ xlsx(`Doro_Team2_IAM_정책설명포함.xlsx`) 분석하다가 Terraform으로 �
 
 주의: `team2-doroload-ssm-access-policy`는 이름이 비슷하지만 **다른 리소스**. 죽은 role이 아니라 지금도 활성 상태인 `team2-doro-load-group`에 붙어있는 정책이라 제외 대상 아님 (아래 3번 참고).
 
-## 2. doro-erp-service-ecr-publisher — 콘솔 수동 생성 확인, import 보류 중
+## 2. doro-erp-service-ecr-publisher — 콘솔 수동 생성 확인, 통합 방향 확정됨
 
 CloudTrail(us-east-1)로 확인:
-- 오늘(2026-08-20) `a-student-02`가 AWS 콘솔에서 수동 생성 (`CreateRole` 이벤트의 userAgent가 Chrome 브라우저, `sessionCredentialFromConsole: true`)
+- 8/20 `a-student-02`가 AWS 콘솔에서 수동 생성 (`CreateRole` 이벤트의 userAgent가 Chrome 브라우저, `sessionCredentialFromConsole: true`)
 - 이후 1시간 동안 `UpdateAssumeRolePolicy`를 6번 재호출하며 trust policy subject 형식을 계속 고침 (중간에 JSON 문법 오류로 한 번 실패한 기록도 있음) — GitHub Actions가 계속 실패해서 콘솔에서 직접 붙잡고 고친 흔적
-- 기존 `doro-erp-dev-github-ecr-push` role(bootstrap 관리)과 권한이 완전히 겹침: ECR push 범위(`doro-erp-{edge,store-access,commerce,payment,queue,audit}`)가 기존 role의 `doro-erp-*` 와일드카드의 부분집합이고, immutable GitHub OIDC subject도 이미 `var.github_ecr_subjects`에 등록돼 있음
+
+**통합 방향 확정 (2026-08-21)**: `doro-erp-dev-github-ecr-push`는 `RoleLastUsed`가 계속 비어있어서(`{}`) **한 번도 assume된 적이 없다는 게 확인됨.** 반면 Doro-ERP-Service의 실제 GitHub Actions workflow(`publish-ecr.yml`)는 GitHub Environment 변수 `AWS_ECR_PUSH_ROLE_ARN`(dev)을 읽는데, 그 값이 이미 `doro-erp-service-ecr-publisher`를 가리키고 있었음 — 즉 실제로 쓰이는 쪽은 처음부터 이거였음. **`doro-erp-service-ecr-publisher`를 정식/영구 리소스로 확정하고 `doro-erp-dev-github-ecr-push`는 제거하는 방향으로 진행.**
 
 진행 상황:
-- Terraform 코드는 "일단 현재 상태 그대로 편입" 방향으로 작성 완료 — `bootstrap/doro-erp-service-ecr-publisher.tf`, `bootstrap/locals.tf`, `bootstrap/iam.tf` 수정, `terraform validate` 통과
-- 코드에 "KNOWN DUPLICATE — pending consolidation review" 주석 남겨둠. `iam:CreateRole`/`iam:CreatePolicy` 권한은 의도적으로 안 줘서, Terraform으로 삭제는 가능하지만 재생성은 안 되게 해둠
-- **아직 `terraform import` / `apply` 안 함** — 아래 4번 state 문제 때문에 보류 중
-- 나중에 Doro-ERP-Service GitHub Actions workflow를 기존 `doro-erp-dev-github-ecr-push`로 옮기기로 하면, 이 파일 + 관련 statement 삭제하고 이 role/policy는 콘솔에서 정리하면 됨
+- `bootstrap/doro-erp-service-ecr-publisher.tf` import 완료, 태그 3건만 diff(무해, 아직 미적용)
+- 통합 작업: `bootstrap/iam.tf`에서 `doro-erp-dev-github-ecr-push` role/inline policy/trust policy 데이터소스 삭제, `doro-erp-service-ecr-publisher`에 `iam:CreateRole`/`iam:CreatePolicy` 추가해서 정식 lifecycle 관리로 전환, `bootstrap/variables.tf`의 `github_ecr_subjects`·`bootstrap/locals.tf`의 `github_ecr_role_name` 정리
+- `terraform/environments/dev/github-actions.tf`의 `data "aws_iam_role"` 조회 대상도 `doro-erp-service-ecr-publisher`로 변경 (안 그러면 dev 스택의 data lookup이 깨짐)
+- 검증: bootstrap plan → `0 add, 4 change(태그+trust policy statement), 2 destroy(안 쓰인 role+policy)`. dev 환경 plan → output 값만 변경, 실제 인프라 변경 없음
+- GitHub Actions workflow는 이미 `doro-erp-service-ecr-publisher`를 가리키고 있어서 **이번 변경으로 workflow 자체는 전혀 안 바뀜**
+- trust policy(mutable/immutable subject 혼용)는 이번 범위에서 제외 — 안정화 후 별도 진행
+- **아직 apply 안 함** — [PR #16](https://github.com/TeamDoroSoft/Doro-ERP-Infra/pull/16)에 코드 반영, 리뷰 대기 중
 
-## 3. team2-doro-load-group — xlsx에 없던 신규 발견, 활성 그룹
+## 3. team2-doro-load-group — xlsx에 없던 신규 발견, 그룹은 관리 안 하기로 범위 축소
 
-- 멤버 5명: `a-student-02`, `a-student-06`, `b-student-11`, `b-student-05`, `cld-team2-doro-github-action` (오늘/어제 로그인 기록 있음)
-- 관리형 정책 1개(`team2-doroload-ssm-access-policy`) + 인라인 정책 3개(`EKS-Direct-Console-Access`, `team2-doro-load-ecr-push-policy`, `team2-doro-load-s3-frontend-policy`) 확인 완료
-- `EKS-Direct-Console-Access`만 Resource가 `*`로 열려있어서 계정 내 모든 EKS 클러스터 조회 가능한 상태 — 나머지 둘은 team2 소유 리소스로 정확히 스코프됨
+- 멤버 5명: `a-student-02`, `a-student-06`, `b-student-11`, `b-student-05`, `cld-team2-doro-github-action`
+- 관리형 정책 1개(`team2-doroload-ssm-access-policy`) + 인라인 정책 3개(`EKS-Direct-Console-Access`, `team2-doro-load-ecr-push-policy`, `team2-doro-load-s3-frontend-policy`) 확인
+- CloudTrail·리소스 존재 여부로 실사용 재확인한 결과: `team2-doro-load-ecr-push-policy`(대상 ECR repo 삭제됨), `team2-doro-load-s3-frontend-policy`(대상 S3 버킷 삭제됨), `EKS-Direct-Console-Access`(사용 이력 0건) 3개는 전부 죽은 권한. `team2-doroload-ssm-access-policy`만 실사용 확인(우연히 `Team=team2` 태그가 현재 프로젝트의 management EC2에도 걸림)
 
-진행 상황:
-- Terraform 코드 작성 완료 — `bootstrap/team2-doro-load-group.tf` (Group + 인라인 정책 3개 + 관리형 정책 attachment + 멤버십), `bootstrap/locals.tf`/`bootstrap/iam.tf`에 권한 statement 추가, `terraform validate` 통과
-- ⚠️ **주의**: `aws_iam_group_membership`은 배타적(authoritative) 리소스라, apply하는 순간 코드에 없는 멤버는 그룹에서 자동으로 빠짐. import 직전에 `aws iam get-group`으로 실제 멤버십 다시 확인 필요 (특히 `b-student-05` 본인 계정 포함돼 있음)
-- **아직 import/apply 안 함**
+**범위 축소 결정**: Group 전체(멤버십 포함)를 편입하지 않고, 실사용 확인된 `team2-doroload-ssm-access-policy` **정책 내용만** 관리. `aws_iam_group_membership`의 배타적 동작으로 인한 멤버 축출 리스크를 죽은 정책들 때문에 감수할 이유가 없다고 판단.
 
-## 4. Bootstrap state 소재 문제 — 별도 문서로 분리함
+진행 상황: `bootstrap/team2-doroload-ssm-access-policy.tf` import 완료, [PR #16](https://github.com/TeamDoroSoft/Doro-ERP-Infra/pull/16)에 반영.
 
-`ERP/Bootstrap_Terraform_State_이슈_보고서.md`로 옮겼음. a-student-06과 협의할 내용이라 Infra 하위가 아니라 ERP 루트에 둠.
+## 4. cld-team2-doro-github-action (IAM User) — 이것도 이전 프로젝트 잔재
+
+- 인라인 정책 `DoroCloudFrontInvalidationPolicy`(CloudFront distribution `E3RZHD5Y24C4BO`, comment `team2-doro-cloud-front`, alias `doro.beam0331.click`)가 직접 붙어있음
+- Username으로 정확히 필터링한 CloudTrail 확인 결과 활동이 전부 2026-07-22~24에 몰려있고 이후 이벤트 0건 — team2-doroload 계열과 같은 시기, 같은 패턴. 3개 저장소(Front/Service/Infra) 어디에도 이 User·정책·distribution을 참조하는 코드 없음
+- **제외 대상으로 분류.** 다만 이 User에 **활성 상태인 장기 Access Key가 2개**(7/20, 7/22 생성, 한 달간 미사용) 남아있어서, Terraform 관리 여부와 별개로 **비활성화/삭제 권장** — 아직 미처리
+
+## 5. Bootstrap state 소재 문제 — 해결됨
+
+별도 문서(`ERP/Bootstrap_Terraform_State_이슈_보고서.md`)에서 다루던 문제. `s3://doro-erp-dev-tfstate-.../bootstrap/terraform.tfstate`에 이미 백업돼 있던 state를 검증 후 [PR #15](https://github.com/TeamDoroSoft/Doro-ERP-Infra/pull/15)로 정식 S3 backend 마이그레이션 완료.
 
 ## 다음 단계
 
-- [ ] a-student-06과 bootstrap state 소재 확인 협의 (별도 문서 참고)
-- [ ] state 확보되면 `team2-doro-load-group`, `doro-erp-service-ecr-publisher` import 진행
-- [ ] `doro-erp-service-ecr-publisher`는 통합(consolidation) 여부 팀 논의 후 재결정
-- [x] `doro-erp-dev-management`의 인라인 정책 2개(`DoroERPDevEKSConnectPolicy`, `DoroErpEcrDescribeImages`) — dev 환경 state가 정상이라 bootstrap 문제와 무관하게 바로 진행 가능, 아래에서 작업
+- [x] bootstrap state S3 backend 마이그레이션 (PR #15)
+- [x] `doro-erp-dev-management` 인라인 정책 2개 import
+- [x] `team2-doroload-ssm-access-policy` import (Group 범위는 축소)
+- [x] `doro-erp-service-ecr-publisher` import + `doro-erp-dev-github-ecr-push`와 통합 방향 확정 (PR #16)
+- [ ] PR #15, #16 리뷰 및 apply
+- [ ] `cld-team2-doro-github-action`의 미사용 Access Key 2개 비활성화/삭제
+- [ ] `doro-erp-service-ecr-publisher`의 trust policy(mutable/immutable subject 혼용) 정리 — 안정화 후 별도 진행

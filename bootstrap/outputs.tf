@@ -8,9 +8,9 @@ output "terraform_execution_role_arn" {
   value       = aws_iam_role.terraform_execution.arn
 }
 
-output "github_ecr_push_role_arn" {
-  description = "GitHub Actions role allowed to push Doro ERP images."
-  value       = aws_iam_role.github_ecr_push.arn
+output "doro_erp_service_ecr_publisher_role_arn" {
+  description = "GitHub Actions role allowed to push Doro ERP service images to ECR."
+  value       = aws_iam_role.doro_erp_service_ecr_publisher.arn
 }
 
 output "workload_permissions_boundary_arn" {
