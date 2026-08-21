@@ -2,7 +2,7 @@
 
 Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 운영 계약을 소유한다.
 
-> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Public Ingress가 구현되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. 실제 AWS 적용 상태는 별도로 확인해야 하며 Runtime Endpoint·내부 TLS·NetworkPolicy, Image Tag 자동 반영과 Argo CD는 후속 범위다.
+> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값, Edge 단일 Public Ingress와 Dev Alpha NetworkPolicy가 구현되어 있다. 모든 Runtime은 최소 2 Replica, 서비스별 HPA·PDB와 2-AZ·Node topology spread를 갖고 EKS Metrics Server를 사용한다. CloudWatch Observability Add-on, Container Insights Log 보존, 운영 SNS Topic과 Node·Pod·DLQ·ALB 최소 경보도 코드에 반영되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. ALB HTTPS Listener·Regional ACM 인증서와 CloudFront HTTPS VPC Origin 구성도 코드에 반영되어 있지만 실제 AWS Listener·인증서 연결, Log 수집·Alarm 전달, CNI Policy Enforcement와 가용성 장애 검증은 별도로 확인해야 한다. 자동 CD와 Argo CD는 Dev 수동 Release를 검증한 뒤 도입한다.
 >
 > 목표 구조와 구현 완료를 혼동하지 않는다. 실제 인프라가 추가되면 실행 명령, 검증 명령과 복구 절차를 같은 변경에 포함한다.
 
@@ -56,7 +56,7 @@ Backend는 하나의 Git 저장소에 있지만 다음 다섯 업무 App과 Stat
 | Queue | `:apps:queue-api` | 8084 | `doro-erp-queue` | PostgreSQL `queue_db`, SQS |
 | Audit | `:apps:audit-api` | 8085 | `doro-erp-audit` | MongoDB `audit`, SQS |
 
-Image는 Service 저장소의 Spring Boot Buildpacks 설정으로 만든다. 배포에서는 Git SHA 같은 불변 Tag를 사용하고 `latest`만으로 Release를 식별하지 않는다.
+Image는 Service 저장소의 Spring Boot Buildpacks 설정으로 만든다. 배포에서는 Git SHA Tag가 가리키는 검증된 ECR Digest를 Manifest에 기록하고 `latest`만으로 Release를 식별하지 않는다.
 
 ```bash
 cd ../Doro-ERP-Service
@@ -110,7 +110,7 @@ Kubernetes Manifest의 현재 범위와 배포 전 필수 조건은 [deploy READ
 
 ## Routing과 신뢰 경계
 
-Frontend는 공개 Routing 계층을 통해 업무 API를 호출하고 Database, Redis, MongoDB와 SQS에 직접 연결하지 않는다. 목표 Routing은 Route 53→CloudFront·WAF→Cell별 내부 ALB→서비스별 Ingress이며 다음 논리 경계를 유지한다.
+Frontend는 공개 Routing 계층을 통해 업무 API를 호출하고 Database, Redis, MongoDB와 SQS에 직접 연결하지 않는다. 목표 Routing은 Route 53→CloudFront·WAF→Cell별 내부 ALB→Edge Ingress이며 다음 논리 경계를 유지한다.
 
 - 외부 TLS 종료와 API Route는 환경별로 한 진입점을 제공한다.
 - POS와 Kiosk의 공개 API 범위는 Backend 인증·인가로 최종 제한한다.
@@ -240,10 +240,12 @@ Infra 구현 시 Pipeline은 다음 순서와 책임을 갖는다.
 1. PR에서 Markdown Link, Compose·Terraform·Manifest 정적 검증과 Secret 검사를 수행한다.
 2. 관련 저장소의 Required Check로 Service Root `./gradlew check`와 Front의 Lint·Unit·Build를 통과시킨다.
 3. 여섯 App Image를 같은 Git SHA Tag로 개별 생성하고 취약점·구성 검사를 수행한다.
-4. 환경 승인 뒤 Infra Plan과 배포 Diff를 검토한다.
+4. Dev에서는 ECR Tag와 Digest의 일치를 확인하고 대상 서비스 Digest만 Infra Manifest에 기록한 뒤 환경 승인과 배포 Diff를 검토한다.
 5. Database Migration은 서비스별 Migration Credential을 쓰는 제한된 단계에서 실행한다.
 6. 새 Version을 Rollout하고 Health·Smoke·핵심 Event 수렴을 확인한다.
-7. 실패하면 Application은 이전 Image로 되돌리되, 이미 적용된 Database Migration은 Forward-fix 원칙을 따른다.
+7. 실패하면 Git에 기록한 이전 Image Digest로 Application을 되돌리되, 이미 적용된 Database Migration은 Forward-fix 원칙을 따른다.
+
+현재 Dev CD는 자동화하지 않는다. 운영자가 승인한 Digest를 `deploy/scripts/record-dev-alpha-image.sh`로 기록하고 수동 Apply한다. Argo CD는 이 절차와 관측 신호를 Dev에서 검증한 뒤 같은 Git 목표 상태를 읽는 방식으로 도입한다.
 
 Application 코드 변경이 없는 서비스는 다시 배포하지 않을 수 있지만, 공통 계약·Platform 또는 Infra 설정 변경의 영향 서비스는 명시적으로 선택한다.
 
@@ -261,12 +263,12 @@ Application 코드 변경이 없는 서비스는 다시 배포하지 않을 수 
 
 ## AWS 구현 전 결정 사항
 
-AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·ALB, 서비스별 Ingress의 IngressGroup 통합은 목표 방향으로 확정했다. 실제 자원을 만들기 전에는 다음 운영 수치와 제품 선택을 확정한다.
+AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·ALB와 Edge 단일 Ingress는 목표 방향으로 확정했다. 실제 자원을 만들기 전에는 다음 운영 수치와 제품 선택을 확정한다.
 
 - RDS PostgreSQL의 Instance Class·Multi-AZ·Cell별 분리 수준
 - MongoDB Atlas 운영 Tier·PrivateLink·백업 보존·복구 목표
 - ElastiCache Redis Multi-AZ·Failover와 Session 가용성 목표
-- EKS Node Group Size·Replica·HPA·NetworkPolicy 구현 방식
+- EKS Node Group Size·Replica·HPA와 운영 후보 NetworkPolicy 검증 방식
 - 운영 후보 환경의 Secret Rotation 자동 Rollout 방식
 - CloudWatch 중심 관측 범위와 비용 한도
 - RPO·RTO, Backup 보존, Release·Rollback 전략

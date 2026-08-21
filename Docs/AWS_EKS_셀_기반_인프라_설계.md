@@ -6,7 +6,7 @@
 >
 > 기준일: 2026-08-10
 >
-> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis·MongoDB Atlas 전용 Stack, 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Public Ingress가 구현되었다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되었다. Runtime Endpoint·내부 TLS·NetworkPolicy, Image Tag 자동 반영과 GitOps는 후속 범위다.
+> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis·MongoDB Atlas 전용 Stack, 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Edge 단일 Public Ingress가 구현되었다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되었다. ALB HTTPS Listener·Regional ACM 인증서·NetworkPolicy·가용성 Manifest와 CloudWatch 중앙 Log·최소 Alarm은 코드에 반영되었으며 실제 AWS 검증이 남아 있다. Dev 배포는 승인된 ECR Digest를 Git에 기록한 뒤 수동 적용하고, 자동 CD와 Argo CD는 이 절차를 검증한 후 도입한다.
 
 ## 1. 문서의 목적
 
@@ -39,8 +39,9 @@ Tenant Domain
 → Route 53
 → Cell별 CloudFront + WAF
 → Cell별 내부 ALB
-→ 같은 IngressGroup에 속한 서비스별 Ingress
-→ Store Access / Commerce / Payment / Queue / Audit
+→ `/api/v1`을 소유한 Edge 단일 Ingress
+→ Edge 내부 HMAC Routing
+→ Store Access / Commerce / Payment / Queue / Audit ClusterIP
 → Cell 전용 데이터·SQS·Secret
 ```
 
@@ -53,7 +54,7 @@ Tenant Domain
 | 배포 방식 | GitHub Actions + ECR + Argo CD GitOps |
 | Manifest | 서비스별 Kustomize Base, 환경·Cell Overlay |
 | 외부 진입 | Route 53, ACM, CloudFront, WAF, Cell별 ALB |
-| API Routing | 서비스별 Ingress를 Cell별 `IngressGroup`으로 결합 |
+| API Routing | Cell별 Edge 단일 Ingress가 `/api/v1`을 소유하고 Module은 ClusterIP만 소유 |
 | Frontend | Vue SPA를 S3에 배포하고 CloudFront OAC로만 접근 |
 | 관계형 데이터 | Amazon RDS for PostgreSQL, 서비스별 Database와 Role |
 | Session | Dev Alpha는 ElastiCache for Redis OSS 7.1 단일 Node, TLS·RBAC |
@@ -316,9 +317,9 @@ Cell과 서비스마다 다음 Resource를 설정한다.
 - 서비스별 `PodDisruptionBudget`
 - `topologySpreadConstraints` 또는 Pod Anti-Affinity
 - Readiness·Liveness·Startup Probe
-- HPA는 Metric과 부하 기준을 확정한 서비스부터 적용
+- HPA는 CPU Request 대비 평균 70%를 공통 초기 기준으로 적용하고 실제 부하 시험 후 서비스별 조정
 
-Dev에서는 서비스별 1 Replica로 비용을 줄일 수 있다. 운영 후보 환경에서는 Stateless Application을 최소 2개 AZ에 분산하는 것을 목표로 한다. Audit·Outbox Scheduler처럼 중복 실행 가능한 Worker는 Application의 Lease·멱등성 계약을 먼저 충족해야 한다.
+Dev Alpha도 운영 후보 기준을 검증할 수 있도록 서비스별 최소 2 Replica를 두 AZ와 서로 다른 Node에 분산한다. HPA는 CPU Resource Metric을 사용하고, PDB는 자발적 중단을 한 번에 한 Replica로 제한한다. Audit·Outbox Scheduler처럼 중복 실행 가능한 Worker는 Application의 Lease·멱등성 계약을 먼저 충족해야 한다. Metrics Server, 실제 Node 용량, HPA Condition, Zone 장애와 Node Drain을 검증하기 전에는 고가용성 배포가 완료된 것으로 보지 않는다.
 
 ## 7. 서비스별 Manifest와 IngressGroup
 
@@ -539,7 +540,7 @@ NAT Gateway는 외부 Provider 통신에 사용한다. 여섯 서비스 중 Toss
 |---|---|
 | Terraform | VPC, EKS, RDS, SQS, IAM, ECR, Edge 등 AWS Resource 생성 |
 | Kustomize | Kubernetes Deployment·Service·Ingress·Config의 환경·Cell 차이 관리 |
-| GitHub Actions | Build·Test·Image Push·Manifest Image Tag 갱신 |
+| GitHub Actions | Build·Test·Image Push와 ECR Digest 검증 |
 | ECR | 여섯 Application의 불변 Container Image 저장 |
 | Argo CD | GitOps Repository의 목표 상태를 EKS에 동기화 |
 
@@ -552,14 +553,15 @@ flowchart LR
     CODE[Application Commit]
     GA[GitHub Actions<br/>Test·Build]
     ECR[ECR<br/>Git SHA Image]
-    GITOPS[GitOps Manifest<br/>Image Tag 변경]
-    ARGO[Argo CD]
+    REVIEW[Dev Release 승인<br/>Digest 기록]
+    ARGO[Argo CD<br/>후속 도입]
     EKS[EKS Cell Deployment]
 
     CODE --> GA
     GA --> ECR
-    GA --> GITOPS
-    GITOPS --> ARGO
+    GA --> REVIEW
+    REVIEW -.->|검증 후 자동화| ARGO
+    REVIEW -->|현재 수동 Apply| EKS
     ARGO --> EKS
     EKS -->|Image Pull| ECR
 ```
@@ -567,10 +569,10 @@ flowchart LR
 1. Service 저장소의 대상 Module Test와 Root Check를 실행한다.
 2. 변경된 Application의 Image를 Git SHA Tag로 Build한다.
 3. 취약점과 Secret 검사를 통과한 Image를 ECR에 Push한다.
-4. GitOps Repository의 대상 환경·Cell Overlay Image Tag를 변경한다.
-5. Argo CD가 승인된 Git Commit을 Pull해 EKS와 동기화한다.
+4. Dev 운영자가 ECR의 전체 Git SHA Tag와 Digest 일치를 확인하고 대상 환경·Cell Overlay의 해당 서비스 Digest만 변경한다.
+5. 현재는 승인된 Git Commit을 수동 Apply한다. Argo CD 검증 뒤에는 같은 Commit을 Pull해 동기화한다.
 6. Readiness, Smoke Test와 핵심 Event 수렴을 확인한다.
-7. 실패하면 이전 Image Tag로 되돌린다. 적용된 Flyway Migration은 되돌리지 않고 Forward-fix한다.
+7. 실패하면 Git에 기록한 이전 Image Digest로 되돌린다. 적용된 Flyway Migration은 되돌리지 않고 Forward-fix한다.
 
 여섯 Application을 항상 함께 배포하지 않는다. 공통 Event·HTTP 계약 변경이 아니라면 변경된 Module만 새 Image로 배포할 수 있다.
 
@@ -609,6 +611,12 @@ CloudWatch Metric의 Cell Dimension에는 환경과 `cellId`를 포함한다. Ap
 - Password, Cookie, Authorization, Kiosk Secret, Toss Secret, 전체 `paymentKey`, 원문 `Idempotency-Key`와 전체 요청·응답 Body를 남기지 않는다.
 - Actuator 상세·Prometheus Endpoint를 공개 Ingress에 노출하지 않는다.
 - Health Probe와 운영 Metric 접근은 전용 Management Port, NetworkPolicy 또는 인증된 수집 경로로 제한한다.
+
+Dev Alpha는 CloudWatch Observability EKS Add-on의 Container Log 수집과 Enhanced Container
+Insights를 우선 사용한다. Spring Boot ECS JSON Console Log에 환경·Cell과 MDC `requestId`를
+포함하고 CloudWatch Log Group 보존 기간을 Terraform으로 제한한다. EKS Failed Node, 서비스별
+Running Pod 부족, DLQ Message, ALB 자체·Target 5xx를 초기 Alarm으로 사용한다. Application
+Signals 자동 계측과 분산 Trace는 중앙 Log와 수동 Release를 검증한 뒤 서비스별로 활성화한다.
 
 ### 12.3 Backup과 복구
 
@@ -722,7 +730,7 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 
 - Terraform Plan과 Apply가 깨끗한 승인 환경에서 반복 가능하다.
 - 여섯 Image가 ECR에 Git SHA Tag로 생성되고 독립 배포된다.
-- 서비스별 Ingress가 하나의 Cell ALB로 결합되고 Route 충돌 검사가 통과한다.
+- Edge Ingress 하나만 Cell ALB에 연결되고 Module Public Ingress가 렌더되지 않는다.
 - Alpha Tenant A와 B가 같은 Pool에서 `tenant_id`로 격리된다.
 - Bravo가 Alpha와 Application·Database·Redis·MongoDB·SQS·Secret을 공유하지 않는다.
 - Alpha Pod에서 Bravo Service·Database·Queue 접근이 실패한다.
@@ -744,9 +752,9 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - 한 EKS Cluster에서 Cell Namespace를 공유할 수 있다.
 - Alpha는 여러 Tenant가 공유하는 Pool이며 Application의 `tenant_id`로 격리한다.
 - Bravo는 전용 Cell이며 Runtime·데이터·Queue·Secret을 Alpha와 분리한다.
-- 각 Backend Module이 자신의 Deployment·Service를 소유하고, 브라우저 공개 경계를 가진 Module만 Ingress를 소유한다.
-- Payment·Audit 공개 Prefix는 Edge Ingress가 소유하며 Provider의 ClusterIP를 직접 공개하지 않는다.
-- 같은 Cell의 서비스별 Ingress를 IngressGroup으로 하나의 ALB에 결합한다.
+- 각 Backend Module은 자신의 Deployment·ClusterIP Service를 소유하고 Public Ingress를 소유하지 않는다.
+- Edge Ingress 하나가 `/api/v1`을 소유하며 명시 등록된 Route만 Provider ClusterIP로 전달한다.
+- Cell별 Edge Ingress를 해당 Cell의 Internal ALB에 연결한다.
 - PostgreSQL·MongoDB·Redis·SQS는 서비스 소유권 계약을 유지한다.
 - SQS Queue는 환경·Cell별로 분리하고 Event에 `cellId`를 넣지 않는다.
 - EKS Pod Identity와 서비스별 IAM 최소 권한을 사용한다.

@@ -77,3 +77,28 @@ output "frontend_url" {
   description = "Dev Alpha public frontend URL."
   value       = "https://${var.domain_name}"
 }
+
+output "backend_api_base_url" {
+  description = "Dev Alpha API base URL routed by CloudFront to the internal ALB."
+  value       = "https://${var.domain_name}/api"
+}
+
+output "alb_origin_certificate_arn" {
+  description = "Regional ACM certificate discovered by the ALB Controller for its HTTPS listener."
+  value       = aws_acm_certificate_validation.alpha_alb.certificate_arn
+}
+
+output "alb_origin_hostname" {
+  description = "TLS-validated CloudFront VPC origin hostname for the internal ALB."
+  value       = var.alb_origin_domain_name
+}
+
+output "cloudwatch_container_log_groups" {
+  description = "CloudWatch log groups that receive Dev Alpha container and Container Insights logs."
+  value       = { for name, group in aws_cloudwatch_log_group.container_insights : name => group.name }
+}
+
+output "operations_alarm_topic_arn" {
+  description = "SNS topic used by Dev Alpha operational alarms."
+  value       = aws_sns_topic.operations.arn
+}
