@@ -130,7 +130,7 @@ VPC·Subnet·Internet Gateway·Route Table·SSM Endpoint는 공유 기반으로 
 - Cell Namespace: `doro-alpha`
 - 서비스: Edge, Store Access, Commerce, Payment, Queue, Audit
 - 서비스별 Deployment Replica: 1
-- 서비스별 Ingress를 동일한 Alpha IngressGroup으로 묶어 내부 ALB 1개를 공유
+- Edge 단일 Ingress가 Alpha 내부 ALB 1개의 `/api/v1` 경계를 소유하고 Module은 ClusterIP만 소유
 - AWS 권한은 서비스별 Pod Identity로 분리
 - Redis는 Dev Alpha 전용 ElastiCache 단일 Node로, MongoDB는 발표용 Atlas M0 Free Cluster로 운영
 
@@ -422,7 +422,7 @@ Dev 자동 Sync의 목표 정책은 `selfHeal=true`, `prune=true`다. 다만 최
 
 ### 6단계: Edge
 
-- 내부 ALB와 서비스별 IngressGroup
+- 내부 ALB와 Edge 단일 Ingress
 - S3 Frontend, CloudFront VPC Origin, WAF, ACM과 Route 53
 - Health Check, Smoke Test와 재배포 검증
 

@@ -52,7 +52,7 @@ kubectl get ingressclass doro-alpha-alb
 - Dev Alpha 공통 AWS Tag
 
 Controller의 Shield·WAF·WAFv2 자동 연결은 끈다. Dev의 WAF는 CloudFront Terraform이
-소유하며 서비스별 Ingress가 공통 보안 자원을 변경하지 않는다.
+소유하며 Edge Ingress 외의 Module Manifest가 공통 보안 자원을 변경하지 않는다.
 
 Ingress를 먼저 삭제한 후 IngressClass와 Controller를 삭제한다. 반대 순서로 삭제하면
 Controller가 ALB를 정리하지 못해 AWS Resource가 남을 수 있다.

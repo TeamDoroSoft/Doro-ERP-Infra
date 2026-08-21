@@ -1,5 +1,23 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_eks_addon_version" "vpc_cni" {
+  addon_name         = "vpc-cni"
+  kubernetes_version = aws_eks_cluster.this.version
+  most_recent        = true
+}
+
+data "aws_eks_addon_version" "metrics_server" {
+  addon_name         = "metrics-server"
+  kubernetes_version = aws_eks_cluster.this.version
+  most_recent        = true
+}
+
+data "aws_eks_addon_version" "cloudwatch_observability" {
+  addon_name         = "amazon-cloudwatch-observability"
+  kubernetes_version = aws_eks_cluster.this.version
+  most_recent        = true
+}
+
 data "aws_vpc" "team2" {
   id = local.existing_network.vpc_id
 }
@@ -44,6 +62,18 @@ data "aws_security_group" "existing_vpc_endpoints" {
 data "aws_route53_zone" "public" {
   name         = "${var.hosted_zone_name}."
   private_zone = false
+}
+
+data "aws_lb" "alpha" {
+  name = "${local.name_prefix}-alpha"
+}
+
+data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
 }
 
 data "aws_ssm_parameter" "amazon_linux_2023_arm64" {

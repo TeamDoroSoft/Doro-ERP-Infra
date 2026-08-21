@@ -4,31 +4,68 @@ namespace: doro-alpha
 resources:
   - ../../../base
   - namespace.yaml
+  - network-policies.yaml
 components:
   - ../../../components/secrets-manager
 patches:
+  - target:
+      kind: ConfigMap
+      labelSelector: app.kubernetes.io/part-of=doro-erp
+    patch: |-
+      - op: add
+        path: /data/LOGGING_STRUCTURED_FORMAT_CONSOLE
+        value: ecs
+      - op: add
+        path: /data/LOGGING_STRUCTURED_ECS_SERVICE_ENVIRONMENT
+        value: dev-alpha
+      - op: add
+        path: /data/LOGGING_STRUCTURED_JSON_ADD_CELL
+        value: alpha
+      - op: add
+        path: /data/LOGGING_STRUCTURED_JSON_STACKTRACE_MAX_LENGTH
+        value: "16384"
   - target:
       kind: Ingress
     patch: |-
       - op: replace
         path: /spec/ingressClassName
         value: doro-alpha-alb
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1security-groups
+        value: doro-erp-dev-alpha-alb
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1manage-backend-security-group-rules
+        value: "true"
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1listen-ports
+        value: '[{"HTTPS":443}]'
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1ssl-policy
+        value: ELBSecurityPolicy-TLS13-1-2-2021-06
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - origin.doro.minseok.click
   - target:
       kind: ConfigMap
       name: edge-api-runtime
     patch: |-
       - op: add
         path: /data/STORE_ACCESS_INTERNAL_BASE_URL
-        value: https://store-access-api.doro-alpha.svc.cluster.local:8081
+        value: http://store-access-api.doro-alpha.svc.cluster.local:8081
       - op: add
         path: /data/AUDIT_INTERNAL_BASE_URL
-        value: https://audit-api.doro-alpha.svc.cluster.local:8085
+        value: http://audit-api.doro-alpha.svc.cluster.local:8085
       - op: add
         path: /data/PAYMENT_INTERNAL_BASE_URL
-        value: https://payment-api.doro-alpha.svc.cluster.local:8083
+        value: http://payment-api.doro-alpha.svc.cluster.local:8083
       - op: add
         path: /data/COMMERCE_INTERNAL_BASE_URL
-        value: https://commerce-api.doro-alpha.svc.cluster.local:8082
+        value: http://commerce-api.doro-alpha.svc.cluster.local:8082
+      - op: add
+        path: /data/EDGE_ALLOW_CLUSTER_SERVICE_HTTP
+        value: "true"
   - target:
       kind: ConfigMap
       name: store-access-api-runtime
@@ -50,7 +87,10 @@ patches:
         value: "true"
       - op: add
         path: /data/COMMERCE_INTERNAL_BASE_URL
-        value: https://commerce-api.doro-alpha.svc.cluster.local:8082
+        value: http://commerce-api.doro-alpha.svc.cluster.local:8082
+      - op: add
+        path: /data/STORE_ACCESS_COMMERCE_ALLOW_CLUSTER_SERVICE_HTTP
+        value: "true"
       - op: add
         path: /data/STORE_ACCESS_AUDIT_STANDARD_QUEUE_URL
         value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-audit-events.fifo
@@ -66,10 +106,13 @@ patches:
         value: "false"
       - op: add
         path: /data/STORE_ACCESS_INTERNAL_BASE_URL
-        value: https://store-access-api.doro-alpha.svc.cluster.local:8081
+        value: http://store-access-api.doro-alpha.svc.cluster.local:8081
       - op: add
         path: /data/QUEUE_INTERNAL_BASE_URL
-        value: https://queue-api.doro-alpha.svc.cluster.local:8084
+        value: http://queue-api.doro-alpha.svc.cluster.local:8084
+      - op: add
+        path: /data/COMMERCE_STORE_ACCESS_ALLOW_CLUSTER_SERVICE_HTTP
+        value: "true"
       - op: add
         path: /data/COMMERCE_PAYMENT_EVENTS_QUEUE_URL
         value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-commerce-events.fifo
@@ -91,7 +134,10 @@ patches:
         value: "false"
       - op: add
         path: /data/COMMERCE_INTERNAL_BASE_URL
-        value: https://commerce-api.doro-alpha.svc.cluster.local:8082
+        value: http://commerce-api.doro-alpha.svc.cluster.local:8082
+      - op: add
+        path: /data/PAYMENT_COMMERCE_ELIGIBILITY_ALLOW_CLUSTER_SERVICE_HTTP
+        value: "true"
       - op: add
         path: /data/PAYMENT_COMMERCE_EVENTS_QUEUE_URL
         value: https://sqs.ap-northeast-2.amazonaws.com/727646470302/doro-erp-dev-alpha-commerce-events.fifo
@@ -127,19 +173,19 @@ patches:
 images:
   - name: doro-erp-edge
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-edge
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-store-access
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-store-access
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-commerce
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-commerce
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-payment
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-payment
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-queue
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-queue
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-audit
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-audit
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured

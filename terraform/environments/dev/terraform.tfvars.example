@@ -3,3 +3,9 @@ eks_public_access_cidrs = ["203.0.113.10/32"]
 
 # Change only when a different approved IAM principal manages Kubernetes.
 eks_admin_principal_arn = "arn:aws:iam::727646470302:user/a-student-06"
+
+# Optional. Leave null until an operator is ready to confirm the SNS email subscription.
+operations_alarm_email = null
+
+# Dev container logs are retained for 14 days by default.
+cloudwatch_log_retention_days = 14

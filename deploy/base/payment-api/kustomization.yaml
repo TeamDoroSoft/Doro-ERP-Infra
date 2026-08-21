@@ -4,6 +4,7 @@ resources:
   - service-account.yaml
   - deployment.yaml
   - service.yaml
+  - availability.yaml
 generatorOptions:
   disableNameSuffixHash: true
   labels:
