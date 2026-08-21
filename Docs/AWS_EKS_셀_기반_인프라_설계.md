@@ -319,7 +319,7 @@ Cell과 서비스마다 다음 Resource를 설정한다.
 - Readiness·Liveness·Startup Probe
 - HPA는 CPU Request 대비 평균 70%를 공통 초기 기준으로 적용하고 실제 부하 시험 후 서비스별 조정
 
-Dev Alpha도 운영 후보 기준을 검증할 수 있도록 서비스별 최소 2 Replica를 두 AZ와 서로 다른 Node에 분산한다. HPA는 CPU Resource Metric을 사용하고, PDB는 자발적 중단을 한 번에 한 Replica로 제한한다. Audit·Outbox Scheduler처럼 중복 실행 가능한 Worker는 Application의 Lease·멱등성 계약을 먼저 충족해야 한다. Metrics Server, 실제 Node 용량, HPA Condition, Zone 장애와 Node Drain을 검증하기 전에는 고가용성 배포가 완료된 것으로 보지 않는다.
+재사용 Base는 운영 후보 기준을 검증할 수 있도록 서비스별 최소 2 Replica를 두 AZ와 서로 다른 Node에 분산한다. Dev Alpha는 비용과 현재 운영 제약 때문에 단일 AZ를 사용하되, Hostname 분산으로 두 Replica를 서로 다른 Node에 배치한다. HPA는 CPU Resource Metric으로 Pod를 2개에서 최대 4개까지 조정하고 Cluster Autoscaler는 Managed Node를 2대에서 최대 4대까지 조정한다. PDB는 자발적 중단을 한 번에 한 Replica로 제한한다. Audit·Outbox Scheduler처럼 중복 실행 가능한 Worker는 Application의 Lease·멱등성 계약을 먼저 충족해야 한다. Metrics Server, 실제 Node 용량, HPA Condition, Node 증감과 Node Drain을 검증하기 전에는 자동 확장이 완료된 것으로 보지 않으며, 단일 AZ Dev 구성을 고가용성으로 판정하지 않는다.
 
 ## 7. 서비스별 Manifest와 IngressGroup
 

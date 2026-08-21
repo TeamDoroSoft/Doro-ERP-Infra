@@ -126,10 +126,10 @@ VPC·Subnet·Internet Gateway·Route Table·SSM Endpoint는 공유 기반으로 
 - 관리형 Node Group Subnet: `private-app-a`만 사용
 - Kubernetes Version: `1.35`
 - Node Instance: `t3.large`, Root Volume `gp3` 50 GiB
-- Node 수: Desired/Min/Max를 우선 `1/1/1`로 시작
+- Node 수: Desired/Min/Max를 `2/2/4`로 구성하고 Cluster Autoscaler가 Desired를 조정
 - Cell Namespace: `doro-alpha`
 - 서비스: Edge, Store Access, Commerce, Payment, Queue, Audit
-- 서비스별 Deployment Replica: 1
+- 서비스별 Deployment와 HPA 최소 Replica: 2, HPA 최대 Replica: 4
 - Edge 단일 Ingress가 Alpha 내부 ALB 1개의 `/api/v1` 경계를 소유하고 Module은 ClusterIP만 소유
 - AWS 권한은 서비스별 Pod Identity로 분리
 - Redis는 Dev Alpha 전용 ElastiCache 단일 Node로, MongoDB는 발표용 Atlas M0 Free Cluster로 운영

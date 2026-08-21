@@ -2,7 +2,7 @@
 
 Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 운영 계약을 소유한다.
 
-> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값, Edge 단일 Public Ingress와 Dev Alpha NetworkPolicy가 구현되어 있다. 모든 Runtime은 최소 2 Replica, 서비스별 HPA·PDB와 2-AZ·Node topology spread를 갖고 EKS Metrics Server를 사용한다. CloudWatch Observability Add-on, Container Insights Log 보존, 운영 SNS Topic과 Node·Pod·DLQ·ALB 최소 경보도 코드에 반영되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. ALB HTTPS Listener·Regional ACM 인증서와 CloudFront HTTPS VPC Origin 구성도 코드에 반영되어 있지만 실제 AWS Listener·인증서 연결, Log 수집·Alarm 전달, CNI Policy Enforcement와 가용성 장애 검증은 별도로 확인해야 한다. 자동 CD와 Argo CD는 Dev 수동 Release를 검증한 뒤 도입한다.
+> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값, Edge 단일 Public Ingress와 Dev Alpha NetworkPolicy가 구현되어 있다. 모든 Runtime은 최소 2 Replica와 서비스별 HPA·PDB를 사용한다. Dev Worker는 비용과 현재 운영 제약을 반영해 단일 AZ에서 서로 다른 Node로 분산하며, Managed Node Group과 Cluster Autoscaler가 Node 2대에서 최대 4대까지 확장한다. EKS Metrics Server, CloudWatch Observability Add-on, Container Insights Log 보존, 운영 SNS Topic과 Node·Pod·DLQ·ALB 최소 경보도 코드에 반영되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. ALB HTTPS Listener·Regional ACM 인증서와 CloudFront HTTPS VPC Origin 구성도 코드에 반영되어 있지만 실제 AWS Listener·인증서 연결, Autoscaler Scale-out/in, Log 수집·Alarm 전달, CNI Policy Enforcement와 가용성 장애 검증은 별도로 확인해야 한다. 자동 CD와 Argo CD는 Dev 수동 Release를 검증한 뒤 도입한다.
 >
 > 목표 구조와 구현 완료를 혼동하지 않는다. 실제 인프라가 추가되면 실행 명령, 검증 명령과 복구 절차를 같은 변경에 포함한다.
 
