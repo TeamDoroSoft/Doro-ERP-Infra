@@ -6,6 +6,18 @@ data "aws_eks_addon_version" "vpc_cni" {
   most_recent        = true
 }
 
+data "aws_eks_addon_version" "metrics_server" {
+  addon_name         = "metrics-server"
+  kubernetes_version = aws_eks_cluster.this.version
+  most_recent        = true
+}
+
+data "aws_eks_addon_version" "cloudwatch_observability" {
+  addon_name         = "amazon-cloudwatch-observability"
+  kubernetes_version = aws_eks_cluster.this.version
+  most_recent        = true
+}
+
 data "aws_vpc" "team2" {
   id = local.existing_network.vpc_id
 }

@@ -28,6 +28,7 @@ deploy/
 - `ServiceAccount`: Terraform의 EKS Pod Identity Association과 같은 이름을 사용한다.
 - `Deployment`: 독립 Image, Health Probe, Resource 요청·제한과 기본 보안 Context를 정의한다.
 - `Service`: Application Port를 노출하는 ClusterIP만 정의한다.
+- `availability.yaml`: 서비스별 HPA와 PodDisruptionBudget을 정의한다.
 - `Ingress`: Edge Base만 브라우저에 공개할 `/api/v1` Prefix를 소유한다.
 - `ConfigMap`: Port, Region과 안전한 기본 Feature Flag를 환경 변수로 제공한다.
 
@@ -40,11 +41,11 @@ Manifest 구조, Runtime 설정, Secrets Manager 연결과 PostgreSQL Migration 
 EKS에 적용할 Image Tag는 아직 완성되지 않았다. Dev Alpha NetworkPolicy는 포함되어 있지만
 실제 CNI Enforcement와 Packet Test 전에는 격리 완료로 판정하지 않는다.
 
-- Image Tag는 의도적으로 `unconfigured`다. ECR에 Push된 Git SHA 또는 Digest로 교체해야 한다.
+- Image Digest는 의도적으로 `sha256:unconfigured`다. ECR에 Push된 전체 Git SHA Tag와 일치하는 Digest로 교체해야 한다.
 - Dev Alpha Overlay에는 RDS PostgreSQL URL, Redis Endpoint와 SQS Queue 값이 구성되어 있다. MongoDB URI는 Audit Secret에서 주입한다.
 - 목표 경계는 CloudFront와 Internal ALB에서 각각 TLS를 종료하고, ALB 뒤 ClusterIP 구간은 HMAC과 Kubernetes Service DNS로 제한한 HTTP를 사용하는 구조다. 각 Runtime의 `*_ALLOW_CLUSTER_SERVICE_HTTP=true` opt-in 없이는 기동 시 Fail-Closed한다.
 - CloudFront VPC Origin은 전용 `origin.doro.minseok.click` 이름과 Regional ACM 인증서를 사용해 내부 ALB의 HTTPS 443 Listener에 연결한다. ALB에서 TLS를 종료한 뒤 Edge ClusterIP Target에는 HTTP로 전달한다.
-- PodDisruptionBudget, HPA와 Argo CD Application은 아직 포함하지 않는다.
+- Argo CD Application은 아직 포함하지 않는다.
 - PostgreSQL Flyway Migration Credential과 Runtime Credential은 분리되어 있다. 실제 Credential 입력과 Migration Image Push가 필요하다.
 
 Image Tag를 채우고 `deploy/migrations/README.md`의 네 Job이 모두 성공하기 전에
@@ -104,13 +105,38 @@ Dev Alpha 결과에는 다음이 포함되어야 한다.
 
 - Namespace 1개
 - ServiceAccount, ConfigMap, Service, Deployment 각각 6개
+- HorizontalPodAutoscaler와 PodDisruptionBudget 각각 6개
 - 공개 Ingress 1개(Edge)
 - SecretProviderClass 6개
 - 각 Deployment의 ConfigMap `envFrom`과 서비스별 Runtime Secret `envFrom`
 - 각 Deployment의 Secrets Store CSI Volume
 - PostgreSQL 사용 Deployment 4개의 `SPRING_FLYWAY_ENABLED=false`
+- 각 Deployment와 HPA의 최소 Replica 2개
+- 각 Deployment의 Zone·Hostname Topology Spread Constraint
 
 Secret 원문은 렌더링 결과나 Git에 포함되지 않아야 한다.
+
+## Replica·HPA·PDB와 Topology Spread
+
+여섯 Runtime은 Deployment 초기 Replica와 HPA `minReplicas`를 모두 2로 고정한다. HPA는
+CPU Request 대비 평균 사용률 70%를 기준으로 최대 4개까지 확장하고, Scale Down은 5분간
+안정화한 뒤 60초마다 최대 1개 또는 50% 중 더 작은 폭으로 축소한다. Java Heap은 부하가
+줄어도 즉시 반환되지 않을 수 있어 Memory Utilization은 자동 확장 신호로 사용하지 않는다.
+
+서비스별 PodDisruptionBudget은 `maxUnavailable: 1`로 자발적 중단 중 최소 한 Replica를
+유지한다. 이는 Node 장애 같은 비자발적 중단을 막지 않으므로 실제 장애 검증을 대체하지 않는다.
+
+각 Deployment는 `topology.kubernetes.io/zone`과 `kubernetes.io/hostname`에 대해
+`maxSkew: 1`, `minDomains: 2`, `DoNotSchedule`을 사용한다. Foundation Node Group도 두
+Application Subnet과 Node 2개를 사용하므로 두 AZ의 Node가 Ready인 정상 상태에서는 서비스별
+두 Replica가 서로 다른 AZ와 Node에 배치된다. 기존 단일-AZ Node Group은 이름 Prefix와
+`create_before_destroy`를 사용하는 2-AZ Node Group으로 교체되므로 Terraform Plan에서
+신규 Node가 Ready가 된 뒤 기존 Node가 제거되는지 확인한다.
+
+HPA의 Resource Metric은 EKS Metrics Server Community Add-on에서 제공한다. HPA가 최대
+Replica를 요청하더라도 이 구성에는 Cluster Autoscaler나 Karpenter가 없으므로 Node 여유
+용량을 넘는 Pod는 Pending이 될 수 있다. 배포 뒤 `kubectl top`, HPA Condition, Zone별 Pod
+배치와 Node Drain 중 PDB 동작을 확인하기 전에는 가용성이 검증된 것으로 판정하지 않는다.
 
 ## Dev Alpha NetworkPolicy
 
@@ -159,16 +185,46 @@ NetworkPolicy는 Job 실행 시점과 DB Endpoint가 확정된 뒤 그 Kustomiza
 
 ## Release 값 반영
 
-이미지는 Overlay의 `images` 항목에서 변경한다.
+자동 CD를 도입하기 전까지 이미지는 검증된 ECR Digest를 Git에 기록하고 수동 적용한다. Script는
+전체 Git SHA Tag가 실제 ECR에서 입력 Digest를 가리키는지 확인한 뒤 대상 서비스 항목 하나만
+변경하며 Cluster에는 직접 적용하지 않는다.
+
+```bash
+./deploy/scripts/record-dev-alpha-image.sh \
+  payment \
+  0123456789abcdef0123456789abcdef01234567 \
+  sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+git diff -- deploy/overlays/dev/alpha/kustomization.yaml
+kubectl kustomize deploy/overlays/dev/alpha >/dev/null
+```
+
+Overlay의 `images` 항목은 다음 형태를 사용한다.
 
 ```yaml
 images:
   - name: doro-erp-payment
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-payment
-    newTag: GIT_SHA
+    digest: sha256:ECR_DIGEST # source-revision: FULL_GIT_SHA
 ```
 
-`GIT_SHA`는 설명용 자리표시자다. 배포에서는 ECR에 존재하는 불변 Tag나 Digest만 사용한다.
+변경을 Commit한 뒤 Migration이 필요한 서비스는 전용 Job을 먼저 완료하고 `kubectl diff -k`로
+검토한 뒤 Overlay를 Apply한다. 전체 Overlay를 Apply해도 Pod Template이 바뀐 Deployment만
+Rollout한다. `kubectl rollout status`와 서비스 Smoke Test를 통과해야 Release가 완료된다.
+Rollback도 동일 Script에 이전 전체 Git SHA와 Digest를 전달해 Git에 기록한 뒤 다시 Apply한다.
+EKS Console이나 `kubectl set image`로만 변경해 Git과 Cluster 상태를 어긋나게 하지 않는다.
+
+## 중앙 Application Log
+
+Dev Alpha ConfigMap은 Spring Boot Console Log를 ECS JSON으로 전환하고 `service.name`,
+`service.environment=dev-alpha`, `cell=alpha`와 MDC의 `requestId`를 구조화한다. Stack Trace는
+Log 수집 비용과 단일 Event 크기를 제한하기 위해 16 KiB로 자른다. CloudWatch Observability
+Add-on은 Container Log에 Kubernetes Metadata를 결합해
+`/aws/containerinsights/doro-erp-dev/application`으로 전송한다. `/actuator/**`는 계속 Public
+Ingress에 노출하지 않는다.
+
+Cookie, Authorization, HMAC, 비밀번호, 전체 요청·응답 Body와 결제정보를 Log에 추가하지 않는다.
+Application Signals 자동 계측은 이번 단계에서 비활성화하며 수동 Release와 중앙 Log를 검증한
+뒤 서비스별로 도입한다.
 
 일반 설정은 ConfigMap Patch로, Credential과 HMAC Key는 AWS Secrets Manager로 전달한다. 실제 Secret 값과 값이 채워진 환경 파일은 커밋하지 않는다.
 

@@ -56,3 +56,43 @@ variable "rds_backup_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "cloudwatch_log_retention_days" {
+  description = "Retention in days for Dev Alpha Container Insights log groups."
+  type        = number
+  default     = 14
+
+  validation {
+    condition = contains([
+      1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545,
+      731, 1096, 1827, 2192, 2557, 2922, 3288, 3653
+    ], var.cloudwatch_log_retention_days)
+    error_message = "cloudwatch_log_retention_days must be a retention value supported by CloudWatch Logs."
+  }
+}
+
+variable "operations_alarm_email" {
+  description = "Optional email address subscribed to Dev Alpha operational alarms. Confirmation is required after apply."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = var.operations_alarm_email == null || can(regex(
+      "^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$",
+      var.operations_alarm_email
+    ))
+    error_message = "operations_alarm_email must be null or a valid email address."
+  }
+}
+
+variable "alb_target_5xx_alarm_threshold" {
+  description = "Number of Edge target 5xx responses in five minutes that raises the Dev Alpha alarm."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.alb_target_5xx_alarm_threshold >= 1
+    error_message = "alb_target_5xx_alarm_threshold must be at least 1."
+  }
+}

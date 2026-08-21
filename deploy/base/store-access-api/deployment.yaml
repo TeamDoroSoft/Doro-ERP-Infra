@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/part-of: doro-erp
     app.kubernetes.io/component: application
 spec:
-  replicas: 1
+  replicas: 2
   revisionHistoryLimit: 3
   minReadySeconds: 10
   strategy:
@@ -25,6 +25,21 @@ spec:
         app.kubernetes.io/part-of: doro-erp
         app.kubernetes.io/component: application
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          minDomains: 2
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: store-access-api
+        - maxSkew: 1
+          minDomains: 2
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: store-access-api
       serviceAccountName: store-access-api
       enableServiceLinks: false
       terminationGracePeriodSeconds: 45

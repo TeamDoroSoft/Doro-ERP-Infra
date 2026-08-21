@@ -98,10 +98,13 @@ resource "aws_launch_template" "eks_node" {
 }
 
 resource "aws_eks_node_group" "alpha" {
-  cluster_name    = aws_eks_cluster.this.name
-  node_group_name = "${local.name_prefix}-alpha"
-  node_role_arn   = aws_iam_role.eks_node.arn
-  subnet_ids      = [data.aws_subnet.app_a.id]
+  cluster_name           = aws_eks_cluster.this.name
+  node_group_name_prefix = "${local.name_prefix}-alpha-"
+  node_role_arn          = aws_iam_role.eks_node.arn
+  subnet_ids = [
+    data.aws_subnet.app_a.id,
+    data.aws_subnet.app_c.id
+  ]
 
   ami_type       = "AL2023_x86_64_STANDARD"
   capacity_type  = "ON_DEMAND"
@@ -113,9 +116,9 @@ resource "aws_eks_node_group" "alpha" {
   }
 
   scaling_config {
-    desired_size = 1
-    max_size     = 1
-    min_size     = 1
+    desired_size = 2
+    max_size     = 2
+    min_size     = 2
   }
 
   update_config {
@@ -125,6 +128,10 @@ resource "aws_eks_node_group" "alpha" {
   labels = {
     environment = "dev"
     cell        = "alpha"
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 
   depends_on = [
@@ -152,6 +159,17 @@ resource "aws_eks_addon" "vpc_cni" {
 resource "aws_eks_addon" "pod_identity_agent" {
   cluster_name                = aws_eks_cluster.this.name
   addon_name                  = "eks-pod-identity-agent"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "PRESERVE"
+
+  depends_on = [aws_eks_node_group.alpha]
+}
+
+resource "aws_eks_addon" "metrics_server" {
+  cluster_name  = aws_eks_cluster.this.name
+  addon_name    = "metrics-server"
+  addon_version = data.aws_eks_addon_version.metrics_server.version
+
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "PRESERVE"
 

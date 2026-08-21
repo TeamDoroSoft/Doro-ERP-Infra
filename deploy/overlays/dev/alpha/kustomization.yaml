@@ -9,6 +9,22 @@ components:
   - ../../../components/secrets-manager
 patches:
   - target:
+      kind: ConfigMap
+      labelSelector: app.kubernetes.io/part-of=doro-erp
+    patch: |-
+      - op: add
+        path: /data/LOGGING_STRUCTURED_FORMAT_CONSOLE
+        value: ecs
+      - op: add
+        path: /data/LOGGING_STRUCTURED_ECS_SERVICE_ENVIRONMENT
+        value: dev-alpha
+      - op: add
+        path: /data/LOGGING_STRUCTURED_JSON_ADD_CELL
+        value: alpha
+      - op: add
+        path: /data/LOGGING_STRUCTURED_JSON_STACKTRACE_MAX_LENGTH
+        value: "16384"
+  - target:
       kind: Ingress
     patch: |-
       - op: replace
@@ -157,19 +173,19 @@ patches:
 images:
   - name: doro-erp-edge
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-edge
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-store-access
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-store-access
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-commerce
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-commerce
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-payment
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-payment
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-queue
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-queue
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured
   - name: doro-erp-audit
     newName: 727646470302.dkr.ecr.ap-northeast-2.amazonaws.com/doro-erp-audit
-    newTag: unconfigured
+    digest: sha256:unconfigured # source-revision: unconfigured

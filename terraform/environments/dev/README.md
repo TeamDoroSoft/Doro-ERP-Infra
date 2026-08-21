@@ -6,11 +6,13 @@
 
 - NAT Gateway와 Private Application 기본 Route 복구
 - S3 Gateway Endpoint, ECR·Logs·Secrets Manager·SQS·STS Interface Endpoint
-- EKS 1.35, 단일 `t4g.large` Managed Node Group, EKS Access Entry
+- EKS 1.35, 2-AZ에 걸친 `t3.large` Managed Node 2개, EKS Access Entry
 - EKS Worker Node SSM과 Private `t4g.micro` 관리 EC2
 - 6개 ECR Repository
 - RDS PostgreSQL 17.10, SQS FIFO Main/DLQ, 서비스별·방향별·DB Migration용 Secrets Manager Container
 - AWS Secrets Store CSI Provider Add-on, Secret Rotation과 Pod Identity
+- Kubernetes HPA용 Metrics Server Community Add-on
+- CloudWatch Observability Add-on, 14일 Container Log 보존과 Dev 운영 Alarm SNS Topic
 - Service GitHub Actions가 OIDC로 Assume하는 ECR Image Push 전용 Role
 - AWS Load Balancer Controller IAM Policy·Role과 Pod Identity Association
 - 비공개 Frontend S3, CloudFront, WAF, Viewer용 us-east-1 ACM, ALB용 Regional ACM, `doro.minseok.click`
@@ -248,6 +250,42 @@ Publish Job을 실행하지 않는다.
 장기 Access Key를 GitHub Secret에 등록하지 않는다. GitHub Organization 또는 AWS Account가 소유한
 `token.actions.githubusercontent.com` OIDC Provider가 먼저 존재해야 하며, 이 Stack은 기존 Provider를
 Data Source로 조회해 재사용한다.
+
+## 10.1 중앙 Log와 최소 Alarm 확인
+
+CloudWatch Observability Add-on은 전용 `cloudwatch-agent` Pod Identity로 Container Log와
+Container Insights Metric을 전송한다. Application Signals 자동 계측은 아직 활성화하지 않아
+Application Pod를 자동 재시작하거나 Trace 비용을 발생시키지 않는다. Container Log Group은
+기본 14일 보존하며 `cloudwatch_log_retention_days`로 조정한다.
+
+```bash
+aws eks describe-addon \
+  --cluster-name doro-erp-dev \
+  --addon-name amazon-cloudwatch-observability \
+  --query 'addon.{status:status,health:health.issues}'
+kubectl get pods -n amazon-cloudwatch
+aws logs describe-log-groups \
+  --log-group-name-prefix /aws/containerinsights/doro-erp-dev \
+  --query 'logGroups[].{name:logGroupName,retention:retentionInDays}' \
+  --output table
+```
+
+최소 Alarm은 EKS Failed Node, 서비스별 Running Pod 2개 미만, FIFO DLQ Message, ALB 자체 5xx와
+Edge Target 5xx를 SNS Topic으로 전달한다. `operations_alarm_email`을 설정했다면 Apply 뒤 수신함에서
+SNS 구독을 반드시 확인한다. Runtime을 아직 배포하지 않은 신규 환경에서는 서비스별 Running Pod
+Alarm이 먼저 발생하는 것이 정상이며, Image와 Migration을 준비한 뒤 모두 `OK`로 전환되는지 확인한다.
+
+```bash
+terraform output -raw operations_alarm_topic_arn
+aws cloudwatch describe-alarms \
+  --alarm-name-prefix doro-erp-dev-alpha \
+  --query 'MetricAlarms[].{name:AlarmName,state:StateValue,reason:StateReason}' \
+  --output table
+aws logs tail /aws/containerinsights/doro-erp-dev/application --since 10m
+```
+
+Alarm 임계치는 Dev 실제 요청량과 복구 시간을 관찰한 뒤 조정한다. Tenant·Store·Actor ID를
+CloudWatch Metric Dimension으로 추가하지 않고, Secret·Cookie·요청 Body를 Log에 남기지 않는다.
 
 ## 11. Frontend 확인
 
