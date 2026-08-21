@@ -161,26 +161,22 @@ data "aws_iam_policy_document" "terraform_iam_management" {
     resources = [local.project_policy_arn_pattern]
   }
 
+  # Only the policy content is managed — the group it's attached to
+  # (team2-doro-load-group) is intentionally left alone. See
+  # bootstrap/team2-doroload-ssm-access-policy.tf.
   statement {
-    sid    = "ManageTeam2DoroLoadGroup"
+    sid    = "ManageTeam2DoroloadSsmAccessPolicy"
     effect = "Allow"
     actions = [
-      "iam:AddUserToGroup",
-      "iam:AttachGroupPolicy",
-      "iam:CreateGroup",
-      "iam:DeleteGroup",
-      "iam:DeleteGroupPolicy",
-      "iam:DetachGroupPolicy",
-      "iam:GetGroup",
-      "iam:GetGroupPolicy",
-      "iam:ListAttachedGroupPolicies",
-      "iam:ListGroupPolicies",
-      "iam:PutGroupPolicy",
-      "iam:RemoveUserFromGroup",
-      "iam:TagGroup",
-      "iam:UntagGroup"
+      "iam:CreatePolicy",
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicy",
+      "iam:DeletePolicyVersion",
+      "iam:SetDefaultPolicyVersion",
+      "iam:TagPolicy",
+      "iam:UntagPolicy"
     ]
-    resources = [local.team2_doro_load_group_arn]
+    resources = [local.team2_doroload_ssm_access_policy_arn]
   }
 
   # Known duplicate of doro-erp-dev-github-ecr-push, imported as-is pending

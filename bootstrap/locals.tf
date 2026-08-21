@@ -15,7 +15,7 @@ locals {
   project_instance_profile_arn_pattern = "arn:aws:iam::${var.aws_account_id}:instance-profile/doro-erp-dev-*"
   workload_boundary_arn                = "arn:aws:iam::${var.aws_account_id}:policy/${local.workload_boundary_name}"
 
-  team2_doro_load_group_arn = "arn:aws:iam::${var.aws_account_id}:group/team2-doro-load-group"
+  team2_doroload_ssm_access_policy_arn = "arn:aws:iam::${var.aws_account_id}:policy/team2-doroload-ssm-access-policy"
 
   # Known duplicate of doro-erp-dev-github-ecr-push, imported as-is pending
   # consolidation. See bootstrap/doro-erp-service-ecr-publisher.tf.
