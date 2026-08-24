@@ -18,7 +18,7 @@ deploy/
 ├─ migrations/
 │  └─ dev-alpha/
 ├─ platform/
-│  └─ aws-load-balancer-controller/
+│  └─ aws-load-balancer-controller/  # Controller 값과 Cluster 공통 GatewayClass
 └─ overlays/
    └─ dev/alpha/
 ```
@@ -29,7 +29,8 @@ deploy/
 - `Deployment`: 독립 Image, Health Probe, Resource 요청·제한과 기본 보안 Context를 정의한다.
 - `Service`: Application Port를 노출하는 ClusterIP만 정의한다.
 - `availability.yaml`: 서비스별 HPA와 PodDisruptionBudget을 정의한다.
-- `Ingress`: Edge Base만 브라우저에 공개할 `/api/v1` Prefix를 소유한다.
+- `HTTPRoute`: Edge Base만 브라우저에 공개할 `/api/v1` Prefix를 소유한다.
+- `TargetGroupConfiguration`: Edge Target Group의 IP Target과 Readiness Health Check를 정의한다.
 - `ConfigMap`: Port, Region과 안전한 기본 Feature Flag를 환경 변수로 제공한다.
 
 Dev Alpha Overlay는 여섯 Base를 `doro-alpha` Namespace에 배치하고
@@ -44,13 +45,13 @@ EKS에 적용할 Image Tag는 아직 완성되지 않았다. Dev Alpha NetworkPo
 - Image Digest는 의도적으로 `sha256:unconfigured`다. ECR에 Push된 전체 Git SHA Tag와 일치하는 Digest로 교체해야 한다.
 - Dev Alpha Overlay에는 RDS PostgreSQL URL, Redis Endpoint와 SQS Queue 값이 구성되어 있다. MongoDB URI는 Audit Secret에서 주입한다.
 - 목표 경계는 CloudFront와 Internal ALB에서 각각 TLS를 종료하고, ALB 뒤 ClusterIP 구간은 HMAC과 Kubernetes Service DNS로 제한한 HTTP를 사용하는 구조다. 각 Runtime의 `*_ALLOW_CLUSTER_SERVICE_HTTP=true` opt-in 없이는 기동 시 Fail-Closed한다.
-- CloudFront VPC Origin은 전용 `origin.doro.minseok.click` 이름과 Regional ACM 인증서를 사용해 내부 ALB의 HTTPS 443 Listener에 연결한다. ALB에서 TLS를 종료한 뒤 Edge ClusterIP Target에는 HTTP로 전달한다.
+- CloudFront VPC Origin은 전용 `origin.doro.minseok.click` 이름과 Regional ACM 인증서를 사용해 Gateway API가 생성한 내부 ALB의 HTTPS 443 Listener에 연결한다. ALB에서 TLS를 종료한 뒤 Edge ClusterIP Target에는 HTTP로 전달한다.
 - Argo CD Application은 아직 포함하지 않는다.
 - PostgreSQL Flyway Migration Credential과 Runtime Credential은 분리되어 있다. 실제 Credential 입력과 Migration Image Push가 필요하다.
 
 Image Tag를 채우고 `deploy/migrations/README.md`의 네 Job이 모두 성공하기 전에
 Application Overlay를 `kubectl apply`하거나 Argo CD Sync하지 않는다.
-Controller IAM·Helm과 IngressClass는 Application Release보다 먼저 준비할 수 있다.
+Controller IAM·Helm, Gateway API CRD와 GatewayClass는 Application Release보다 먼저 준비할 수 있다.
 
 ## 기본 동작
 
@@ -67,30 +68,32 @@ Base의 비동기 Consumer와 Outbox는 실제 Queue URL이 준비되기 전까�
 
 실제 AWS Resource와 IAM 권한을 확인한 뒤 Overlay에서 필요한 기능만 활성화한다.
 
-## ALB와 공개 Route
+## Gateway API ALB와 공개 Route
 
 AWS Load Balancer Controller는 AWS 공식 Helm Chart `3.5.0`으로 설치하며 Controller
 `v3.5.0` IAM Policy와 Pod Identity는 Terraform이 관리한다. 설치와 검증 순서는
 [`platform/aws-load-balancer-controller`](platform/aws-load-balancer-controller/README.md)를 따른다.
 
-Base의 `doro-cell-alb`는 재사용용 논리 이름이며 Dev Alpha Overlay가 이를
-`doro-alpha-alb`로 교체한다. `IngressClassParams`가 내부 ALB, `doro-alpha`
-IngressGroup, 두 Private Application Subnet과 IP Target을 중앙에서 강제한다.
-Edge Ingress의 `tls.hosts`는 AWS Load Balancer Controller가 Regional ACM 인증서를
-자동 탐색하기 위한 값이다. CloudFront의 API Origin Request Policy는 요청의 Cookie·Query·나머지 Header를 보존하되
+Base의 Edge `HTTPRoute`는 재사용용 논리 Parent `doro-cell-gateway`를 참조하고 Dev Alpha
+Overlay가 이를 `doro-alpha-gateway`로 교체한다. `LoadBalancerConfiguration`이
+`doro-erp-dev-alpha-gateway` 내부 ALB, 두 Private Application Subnet, CloudFront 전용
+Security Group과 공통 AWS Tag를 중앙에서 강제한다. Edge `TargetGroupConfiguration`은
+Pod IP Target과 Readiness Health Check를 소유한다. Gateway HTTPS Listener의 hostname은
+AWS Load Balancer Controller가 Regional ACM 인증서를 자동 탐색하기 위한 값이다.
+CloudFront의 API Origin Request Policy는 요청의 Cookie·Query·나머지 Header를 보존하되
 Viewer `Host`만 Origin 이름으로 교체한다. 따라서 전용 Origin 인증서 이름과 TLS 검증이
-일치하고, Host가 없는 `/api/v1` Rule이 요청을 수용한다. ALB Security Group은 CloudFront
+일치하고 Edge `HTTPRoute`의 `/api/v1` Rule이 요청을 수용한다. ALB Security Group은 CloudFront
 Origin-Facing Prefix List의 TCP 443만 허용한다.
 
-| Ingress 소유 서비스 | 공개 Prefix | 실제 Provider |
+| HTTPRoute 소유 서비스 | 공개 Prefix | 실제 Provider |
 |---|---|---|
 | Edge | `/api/v1` | Edge에 명시 등록된 Login·본인 비밀번호 변경·Catalog menu·Order·Payment·Audit만 각 Provider로 전달하고 나머지는 Fail-Closed |
 
-업무 Module은 직접적인 Public Ingress를 갖지 않는다. Payment 공개 계약은 Edge가
+업무 Module은 직접적인 Public HTTPRoute를 갖지 않는다. Payment 공개 계약은 Edge가
 세션을 확인하고 서명해서 전달하며 Audit은 `/internal/v1/audits`만 제공한다. Module을
 직접 ALB에 연결하면 Edge 인증 경계를 우회한다. 아직 승인되지 않은 Kiosk·Table·Queue·관리용 Catalog Route는 Edge에서도 열지 않는다.
 Login·본인 비밀번호 Route는 Runtime과 테스트가 존재하지만 정본 OpenAPI·계약 ID 승인이 남아 있어 `DEPLOYMENT_VERIFIED`로 판정하지 않는다.
-`/internal/**`와 `/actuator/**`도 Ingress에 등록하지 않는다.
+`/internal/**`와 `/actuator/**`도 HTTPRoute에 등록하지 않는다.
 
 ## 렌더링 검증
 
@@ -106,7 +109,9 @@ Dev Alpha 결과에는 다음이 포함되어야 한다.
 - Namespace 1개
 - ServiceAccount, ConfigMap, Service, Deployment 각각 6개
 - HorizontalPodAutoscaler와 PodDisruptionBudget 각각 6개
-- 공개 Ingress 1개(Edge)
+- 공개 HTTPRoute 1개(Edge)
+- TargetGroupConfiguration 1개(Edge)
+- Dev Alpha Overlay의 LoadBalancerConfiguration과 Gateway 각각 1개
 - SecretProviderClass 6개
 - 각 Deployment의 ConfigMap `envFrom`과 서비스별 Runtime Secret `envFrom`
 - 각 Deployment의 Secrets Store CSI Volume
@@ -223,7 +228,7 @@ Dev Alpha ConfigMap은 Spring Boot Console Log를 ECS JSON으로 전환하고 `s
 Log 수집 비용과 단일 Event 크기를 제한하기 위해 16 KiB로 자른다. CloudWatch Observability
 Add-on은 Container Log에 Kubernetes Metadata를 결합해
 `/aws/containerinsights/doro-erp-dev/application`으로 전송한다. `/actuator/**`는 계속 Public
-Ingress에 노출하지 않는다.
+HTTPRoute에 노출하지 않는다.
 
 Cookie, Authorization, HMAC, 비밀번호, 전체 요청·응답 Body와 결제정보를 Log에 추가하지 않는다.
 Application Signals 자동 계측은 이번 단계에서 비활성화하며 수동 Release와 중앙 Log를 검증한

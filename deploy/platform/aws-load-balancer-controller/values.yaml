@@ -11,3 +11,7 @@ serviceAccount:
 enableShield: false
 enableWaf: false
 enableWafv2: false
+
+controllerConfig:
+  featureGates:
+    ALBGatewayAPI: true

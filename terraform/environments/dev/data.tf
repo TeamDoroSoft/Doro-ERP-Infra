@@ -64,8 +64,10 @@ data "aws_route53_zone" "public" {
   private_zone = false
 }
 
-data "aws_lb" "alpha" {
-  name = "${local.name_prefix}-alpha"
+data "aws_lb" "gateway" {
+  count = var.enable_gateway_backend ? 1 : 0
+
+  name = "${local.name_prefix}-alpha-gateway"
 }
 
 data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {

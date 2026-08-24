@@ -10,7 +10,7 @@ locals {
     for app_name in local.app_names : app_name => "${app_name}-api"
   }
 
-  alpha_alb_cloudwatch_dimension = split("loadbalancer/", data.aws_lb.alpha.arn)[1]
+  alpha_alb_cloudwatch_dimension = var.enable_gateway_backend ? split("loadbalancer/", data.aws_lb.gateway[0].arn)[1] : null
 }
 
 resource "aws_cloudwatch_log_group" "container_insights" {
@@ -148,6 +148,8 @@ resource "aws_cloudwatch_metric_alarm" "dlq_messages" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "alb_generated_5xx" {
+  count = var.enable_gateway_backend ? 1 : 0
+
   alarm_name          = "${local.name_prefix}-alpha-alb-generated-5xx"
   alarm_description   = "The Dev Alpha ALB generated at least one 5xx response in five minutes."
   namespace           = "AWS/ApplicationELB"
@@ -164,6 +166,8 @@ resource "aws_cloudwatch_metric_alarm" "alb_generated_5xx" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "edge_target_5xx" {
+  count = var.enable_gateway_backend ? 1 : 0
+
   alarm_name          = "${local.name_prefix}-alpha-edge-target-5xx"
   alarm_description   = "Edge targets returned too many 5xx responses in five minutes."
   namespace           = "AWS/ApplicationELB"
