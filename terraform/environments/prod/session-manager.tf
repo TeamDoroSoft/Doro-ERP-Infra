@@ -68,7 +68,7 @@ resource "aws_iam_role_policy" "session_logs" {
     eks-node   = aws_iam_role.eks_node.name
   }
 
-  name   = "DoroERPDevSessionLogPolicy"
+  name   = "DoroERPProdSessionLogPolicy"
   role   = each.value
   policy = data.aws_iam_policy_document.session_logs.json
 }
