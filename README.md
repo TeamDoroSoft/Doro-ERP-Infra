@@ -156,7 +156,7 @@ Frontend는 공개 Routing 계층을 통해 업무 API를 호출하고 Database,
 - 하나의 Queue에서 서로 다른 서비스 Consumer를 경쟁시키지 않는다.
 - Queue 이름은 환경 Prefix 또는 Account 격리로 충돌을 막고 Application에는 URL·ARN을 설정으로 주입한다.
 - SQS는 업무 상태 저장소가 아니다. POS·Kiosk 화면은 각 서비스 API가 Database에서 조회한 상태를 사용한다.
-- `MessageGroupId`와 `MessageDeduplicationId`는 [비동기 Event 계약](../Docs/Specifications/비동기_Event_계약.md)의 Event별 공식을 따른다. Infra에서 임의로 다른 공식을 만들지 않는다.
+- `MessageGroupId`와 `MessageDeduplicationId`는 [Event 전송 공통 계약](<../Docs/Specifications/07 대기열·호출·SQS/Event 전송 공통 계약.md>)의 Event별 공식을 따른다. Infra에서 임의로 다른 공식을 만들지 않는다.
 - 전달은 최소 한 번을 전제로 하며 Commerce·Queue는 PostgreSQL Inbox, Audit은 MongoDB Unique Index로 중복 효과를 제거한다.
 
 ## Runtime Secret 주입

@@ -342,4 +342,4 @@ aws cloudfront list-distributions \
   --output table
 ```
 
-현재 단계에서는 `/` 정적 SPA만 연결된다. `/api/*`는 AWS Load Balancer Controller와 내부 ALB 생성 후 별도 Plan으로 연결한다.
+Terraform에는 `/` 정적 SPA와 `/api/*` CloudFront Ordered Cache Behavior·VPC Origin이 코드화돼 있다. 다만 AWS Load Balancer Controller가 생성하는 내부 ALB와 HTTPS Listener를 포함한 실제 AWS Apply·Runtime 연결은 아직 검증되지 않았다.

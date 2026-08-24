@@ -23,9 +23,9 @@
 제품 기능과 Application 내부 계약은 이 문서가 다시 정의하지 않는다. 관련 정본은 다음 문서다.
 
 - [제품·시스템 개요](../../Docs/Doro_SaaS_POS_Kiosk.md)
-- [공통 서비스 통신 계약](../../Docs/Specifications/공통_서비스_통신_계약.md)
-- [비동기 Event 계약](../../Docs/Specifications/비동기_Event_계약.md)
-- [서비스별 계약 카탈로그](../../Docs/Specifications/서비스별_계약_카탈로그.md)
+- [HTTP·인증 공통 계약](<../../Docs/Specifications/02 계정·역할·기기 인증/HTTP·인증 공통 계약.md>)
+- [Event 전송 공통 계약](<../../Docs/Specifications/07 대기열·호출·SQS/Event 전송 공통 계약.md>)
+- [서비스·계약 카탈로그](../../Docs/Specifications/README.md)
 - [기술 스택](<../../Docs/의사결정/ERP 기술 스택.md>)
 
 AWS 배포 Topology·Cell 격리·Gateway API Routing·자원 소유권은 이 문서를 기준으로 한다. [Infra README](../README.md)는 현재 구현 상태와 실행·검증 진입점을 소유한다. 설계가 변경되면 두 문서를 같은 변경에서 맞춘다.
@@ -239,7 +239,7 @@ flowchart TB
     CELL_B --> CW
 ```
 
-이 다이어그램은 목표 상태를 표현한다. 현재 저장소에 이 구성을 생성하는 Terraform과 Manifest가 있다는 의미는 아니다. Internal ALB는 Kubernetes Ingress Resource가 아니라 AWS Load Balancer Controller의 Gateway API 기능(GatewayClass·Gateway·LoadBalancerConfiguration)이 생성하며, 각 Cell에서 이 ALB로 연결되는 Kubernetes Route는 Edge HTTPRoute 하나뿐이다.
+이 다이어그램은 목표 Topology를 표현한다. 현재 저장소에는 이를 구성하는 Terraform과 Kustomize Manifest가 있지만, 실제 AWS Runtime·Secret·TLS 검증이 완료됐다는 의미는 아니다. Internal ALB는 Kubernetes Ingress Resource가 아니라 AWS Load Balancer Controller의 Gateway API 기능(GatewayClass·Gateway·LoadBalancerConfiguration)이 생성하며, 각 Cell에서 이 ALB로 연결되는 Kubernetes Route는 Edge HTTPRoute 하나뿐이다.
 
 ## 5. 외부 Traffic과 Tenant Domain Routing
 
@@ -642,7 +642,7 @@ SQS는 대기열 화면이나 업무 상태의 조회 저장소가 아니다. PO
 
 ### 10.1 Secret 주입
 
-Secret은 AWS Secrets Manager에 저장하고 EKS Pod Identity로 서비스별 접근을 제한한다. Kubernetes Secret 동기화 제품은 구현 시 선택하되 다음 원칙은 고정한다.
+Secret은 AWS Secrets Manager에 저장하고 EKS Pod Identity로 서비스별 접근을 제한한다. Dev Alpha Manifest에는 AWS Secrets Store CSI Driver Provider와 `SecretProviderClass` 연결이 구현돼 있으나 실제 Cluster의 Secret 주입·회전과 접근 차단은 별도로 검증한다. 다음 원칙은 고정한다.
 
 - Git, Kustomize, Terraform Variable 기본값과 CI Log에 Secret 원문을 두지 않는다.
 - Terraform Output과 Plan에 Secret 값을 출력하지 않는다.
