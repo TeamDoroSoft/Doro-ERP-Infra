@@ -150,7 +150,7 @@ enable_gateway_backend = false
 
 ### 2단계: Gateway ALB 생성
 
-[`deploy/platform/aws-load-balancer-controller`](../../../deploy/platform/aws-load-balancer-controller/README.md)의
+[`Doro-ERP-GitOps/deploy/platform/aws-load-balancer-controller`](https://github.com/TeamDoroSoft/Doro-ERP-GitOps/blob/main/deploy/platform/aws-load-balancer-controller/README.md)의
 절차로 Gateway API CRD, Controller, GatewayClass와 Prod Alpha Overlay를 적용한다. 새 ALB와
 Edge Target이 준비될 때까지 CloudFront Backend를 활성화하지 않는다.
 
@@ -255,7 +255,7 @@ Secret에 각각 입력한다. Runtime Pod Identity는 Migration Secret을 읽�
 
 ## 9. Application·Migration Secret 입력과 CSI 연결
 
-Terraform Apply 뒤 AWS Console의 Secrets Manager에서 서비스별 Secret과 방향별 HMAC Secret 값을 JSON으로 입력한다. 정확한 Runtime Key 목록은 `deploy/components/secrets-manager/README.md`, Migration 입력과 실행 순서는 `deploy/migrations/README.md`를 따른다.
+Terraform Apply 뒤 AWS Console의 Secrets Manager에서 서비스별 Secret과 방향별 HMAC Secret 값을 JSON으로 입력한다. 정확한 Runtime Key 목록과 Migration 실행 순서는 각각 `Doro-ERP-GitOps/deploy/components/secrets-manager/README.md`와 `Doro-ERP-GitOps/deploy/migrations/README.md`를 따른다. Terraform의 Pod Identity 연결은 GitOps Manifest의 ServiceAccount 이름과 Secret 경로 계약에 의존한다.
 
 ```bash
 aws eks update-kubeconfig --region ap-northeast-2 --name doro-erp-prod
