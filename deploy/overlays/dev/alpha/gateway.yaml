@@ -1,0 +1,51 @@
+apiVersion: gateway.k8s.aws/v1
+kind: LoadBalancerConfiguration
+metadata:
+  name: doro-alpha-alb-config
+  namespace: doro-alpha
+  labels:
+    app.kubernetes.io/name: doro-alpha-gateway
+    app.kubernetes.io/part-of: doro-erp
+spec:
+  loadBalancerName: doro-erp-dev-alpha-gateway
+  scheme: internal
+  ipAddressType: ipv4
+  loadBalancerSubnets:
+    - identifier: subnet-000e8271451fdf084
+    - identifier: subnet-063e9f24a951f3405
+  securityGroups:
+    - doro-erp-dev-alpha-alb
+  manageBackendSecurityGroupRules: true
+  listenerConfigurations:
+    - protocolPort: HTTPS:443
+      sslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+  tags:
+    Project: Doro-ERP
+    Environment: dev
+    Cell: alpha
+    Team: team2
+    ManagedBy: aws-load-balancer-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: doro-alpha-gateway
+  namespace: doro-alpha
+  labels:
+    app.kubernetes.io/name: doro-alpha-gateway
+    app.kubernetes.io/part-of: doro-erp
+spec:
+  gatewayClassName: doro-alb
+  infrastructure:
+    parametersRef:
+      group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+      name: doro-alpha-alb-config
+  listeners:
+    - name: https
+      hostname: origin.doro.minseok.click
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: Same

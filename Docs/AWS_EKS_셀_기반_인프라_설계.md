@@ -55,7 +55,7 @@ Tenant Domain
 | 배포 방식 | GitHub Actions + ECR + Argo CD GitOps |
 | Manifest | 서비스별 Kustomize Base, 환경·Cell Overlay |
 | 외부 진입 | Route 53, ACM, CloudFront, WAF, Cell별 ALB(Gateway API) |
-| API Routing | AWS Load Balancer Controller Gateway API(GatewayClass·Gateway·HTTPRoute·LoadBalancerConfiguration·TargetGroupConfiguration)가 Cell별 Internal ALB를 생성하고, Edge 단일 HTTPRoute가 `/api/v1`을 소유하며 Module은 ClusterIP·TargetGroupConfiguration만 소유 |
+| API Routing | AWS Load Balancer Controller Gateway API(GatewayClass·Gateway·HTTPRoute·LoadBalancerConfiguration·TargetGroupConfiguration)가 Cell별 Internal ALB를 생성하고, Edge 단일 HTTPRoute와 TargetGroupConfiguration이 `/api/v1`·Edge Target을 소유하며 Module은 ClusterIP만 소유 |
 | Frontend | Vue SPA를 S3에 배포하고 CloudFront OAC로만 접근 |
 | 관계형 데이터 | Amazon RDS for PostgreSQL, 서비스별 Database와 Role |
 | Session | Dev Alpha는 ElastiCache for Redis OSS 7.1 단일 Node, TLS·RBAC |
@@ -360,7 +360,11 @@ Cell Alpha
 | NetworkPolicy | 서비스 허용 흐름 제안, Infra 소유 | 변경 없음 |
 | Service Account | 서비스 팀(이름·사용 Resource), Infra(Pod Identity 연결) | 변경 없음 |
 
-예시 Manifest는 **AWS Load Balancer Controller 3.5.0** 기준이다. `gateway.k8s.aws` Group의 `LoadBalancerConfiguration`·`TargetGroupConfiguration`은 이 Version에서 `v1`으로 GA됐다(이전 `v1beta1`에서 승격). 표준 Gateway API Resource(`GatewayClass`·`Gateway`·`HTTPRoute`)는 `gateway.networking.k8s.io/v1`로 별개다. 정확한 필드 구조는 설치하는 Controller Version의 공식 CRD 문서로 최종 확인한다.
+아래 YAML은 리소스 관계를 설명하는 축약 예시이며 직접 적용하지 않는다. 실행 가능한 정본은
+`deploy/` 아래의 Kustomize Manifest다. 예시는 **AWS Load Balancer Controller 3.5.0** 기준이다.
+`gateway.k8s.aws` Group의 `LoadBalancerConfiguration`·`TargetGroupConfiguration`은 이
+Version에서 `v1`으로 GA됐다(이전 `v1beta1`에서 승격). 표준 Gateway API Resource
+(`GatewayClass`·`Gateway`·`HTTPRoute`)는 `gateway.networking.k8s.io/v1`로 별개다.
 
 ```yaml
 # GatewayClass — Cluster에 1개, Infra 공통 소유, 표준 Gateway API Resource
@@ -384,7 +388,7 @@ spec:
     - identifier: subnet-alpha-app-a
     - identifier: subnet-alpha-app-b
   securityGroups:
-    - identifier: sg-doro-alpha-alb
+    - doro-erp-dev-alpha-alb
   manageBackendSecurityGroupRules: true
   listenerConfigurations:
     - protocolPort: HTTPS:443
@@ -428,7 +432,7 @@ spec:
   defaultConfiguration:
     targetType: ip
     healthCheckConfig:
-      healthCheckPath: /actuator/health
+      healthCheckPath: /actuator/health/readiness
       healthCheckPort: "8080"
     tags:
       Team: team2
@@ -496,7 +500,7 @@ Gateway API는 `parentRefs`로 여러 `HTTPRoute`를 하나의 `Gateway`에 붙�
 
 기존 Edge Ingress·IngressGroup은 이미 운영 중인 Cell의 유일한 외부 진입점이므로, Gateway API로 무중단에 가깝게 전환하기 위해 다음 순서를 따른다. 각 단계는 이전 단계가 검증된 뒤에만 진행하며, 실패 시 CloudFront Origin만 되돌리면 되도록 기존 Ingress·ALB는 마지막 단계 전까지 그대로 둔다.
 
-1. **Gateway ALB 생성**: 기존 Ingress·IngressGroup은 그대로 둔 채 Cell Namespace에 `GatewayClass`(Cluster에 아직 없다면 1회), `LoadBalancerConfiguration`, `Gateway`, Edge `HTTPRoute`, 서비스별 `TargetGroupConfiguration`을 추가로 배포한다. AWS Load Balancer Controller가 기존 Ingress ALB와는 **완전히 별개인 새 Internal ALB**를 생성한다 — 이 시점에는 CloudFront가 아직 새 ALB를 모른다.
+1. **Gateway ALB 생성**: 기존 Ingress·IngressGroup은 그대로 둔 채 Cell Namespace에 `GatewayClass`(Cluster에 아직 없다면 1회), `LoadBalancerConfiguration`, `Gateway`, Edge `HTTPRoute`와 Edge 전용 `TargetGroupConfiguration`을 추가로 배포한다. AWS Load Balancer Controller가 기존 Ingress ALB와는 **완전히 별개인 새 Internal ALB**를 생성한다 — 이 시점에는 CloudFront가 아직 새 ALB를 모른다.
 2. **검증**: `edge-api` Target Group(이 Cell에 존재하는 유일한 ALB Target Group) 하나의 Target Health가 `Healthy`인지, `HTTPRoute`의 `/api/v1` 매칭이 Edge까지 정상 응답하는지 확인한다. 이 확인에는 임시 Host Header 지정 호출이나 임시 Route 53 Record 같은 **테스트용 임시 매니페스트**를 사용할 수 있다.
 3. **VPC Origin 전환**: 검증이 끝나면 CloudFront Distribution의 `/api/*` VPC Origin이 가리키는 대상을 기존 Ingress ALB에서 새 Gateway ALB로 변경한다. Terraform은 `data "aws_lb" "gateway" { name = "doro-erp-dev-alpha-gateway" }`(§7.6)로 Kubernetes/AWS Load Balancer Controller가 생성한 새 ALB를 조회해 ARN·DNS Name을 얻고, CloudFront VPC Origin Resource가 이 값을 참조하도록 갱신한다. CloudFront 전파 지연을 고려해 Traffic이 낮은 시간대에 수행한다.
 4. **CloudFront 검증**: 실제 Tenant Domain으로 `/api/v1` 요청이 새 ALB→Gateway→Edge까지 정상 처리되는지, WAF·TLS·Access Log가 정상 기록되는지 확인한다. 일정 관측 기간 동안 오류율·지연을 관찰한다. 문제가 발견되면 VPC Origin을 기존 ALB로 즉시 되돌린다(기존 Ingress·ALB가 아직 살아있으므로 Rollback 비용이 낮다).
@@ -519,6 +523,7 @@ data "aws_lb" "gateway" {
 - CloudFront VPC Origin Resource는 `data.aws_lb.gateway.arn`(또는 `dns_name`)을 참조하도록 갱신한다(§7.5 3단계).
 - Bravo Cell로 확장할 때는 같은 규칙으로 `doro-erp-dev-bravo-gateway`처럼 Cell별로 다른 고정 이름을 사용한다.
 - 전환 완료 후 기존 Ingress ALB가 삭제되면 이 이름 충돌 우려는 사라지지만, `loadBalancerName` 고정 자체는 향후 재현 가능한 Terraform 조회를 위해 계속 유지한다.
+- 새 환경의 순환 의존성을 끊기 위해 Terraform은 필수 Boolean 입력 `enable_gateway_backend`를 사용한다. Foundation Apply에서는 명시적으로 `false`를 사용해 Gateway ALB Data Source와 CloudFront Backend 연결을 만들지 않고, Gateway ALB와 Edge Target이 준비된 뒤 `true`로 바꿔 VPC Origin·Origin DNS·ALB 경보를 연결한다. 기본값을 두지 않아 기존 환경에서 의도치 않은 Backend 제거를 막는다.
 
 ## 8. 서비스별 데이터와 연결 권한
 

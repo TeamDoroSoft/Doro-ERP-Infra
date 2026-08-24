@@ -51,6 +51,11 @@ variable "hosted_zone_name" {
   default     = "minseok.click"
 }
 
+variable "enable_gateway_backend" {
+  description = "Explicitly enable the CloudFront VPC origin, origin DNS, and ALB alarms only after the Gateway API ALB exists."
+  type        = bool
+}
+
 variable "rds_backup_retention_days" {
   description = "RDS automated backup retention for Dev."
   type        = number

@@ -9,3 +9,7 @@ operations_alarm_email = null
 
 # Dev container logs are retained for 14 days by default.
 cloudwatch_log_retention_days = 14
+
+# Keep false for the foundation apply. Set true only after the Gateway API ALB
+# doro-erp-dev-alpha-gateway exists and its Edge target is healthy.
+enable_gateway_backend = false

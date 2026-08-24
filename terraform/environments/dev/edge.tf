@@ -84,9 +84,11 @@ resource "aws_vpc_security_group_egress_rule" "alpha_alb_all" {
 }
 
 resource "aws_cloudfront_vpc_origin" "alpha_alb" {
+  count = var.enable_gateway_backend ? 1 : 0
+
   vpc_origin_endpoint_config {
     name                   = "${local.name_prefix}-alpha-alb"
-    arn                    = data.aws_lb.alpha.arn
+    arn                    = data.aws_lb.gateway[0].arn
     http_port              = 80
     https_port             = 443
     origin_protocol_policy = "https-only"
@@ -188,13 +190,15 @@ resource "aws_acm_certificate_validation" "alpha_alb" {
 }
 
 resource "aws_route53_record" "alpha_alb_origin" {
+  count = var.enable_gateway_backend ? 1 : 0
+
   zone_id = data.aws_route53_zone.public.zone_id
   name    = var.alb_origin_domain_name
   type    = "A"
 
   alias {
-    name                   = data.aws_lb.alpha.dns_name
-    zone_id                = data.aws_lb.alpha.zone_id
+    name                   = data.aws_lb.gateway[0].dns_name
+    zone_id                = data.aws_lb.gateway[0].zone_id
     evaluate_target_health = true
   }
 }
@@ -253,14 +257,18 @@ resource "aws_cloudfront_distribution" "frontend" {
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
-  origin {
-    domain_name = var.alb_origin_domain_name
-    origin_id   = "backend-alb"
+  dynamic "origin" {
+    for_each = var.enable_gateway_backend ? [true] : []
 
-    vpc_origin_config {
-      vpc_origin_id            = aws_cloudfront_vpc_origin.alpha_alb.id
-      origin_keepalive_timeout = 5
-      origin_read_timeout      = 30
+    content {
+      domain_name = var.alb_origin_domain_name
+      origin_id   = "backend-alb"
+
+      vpc_origin_config {
+        vpc_origin_id            = aws_cloudfront_vpc_origin.alpha_alb[0].id
+        origin_keepalive_timeout = 5
+        origin_read_timeout      = 30
+      }
     }
   }
 
@@ -288,16 +296,20 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  ordered_cache_behavior {
-    path_pattern           = "/api/*"
-    target_origin_id       = "backend-alb"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
+  dynamic "ordered_cache_behavior" {
+    for_each = var.enable_gateway_backend ? [true] : []
 
-    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
-    origin_request_policy_id = aws_cloudfront_origin_request_policy.api.id
+    content {
+      path_pattern           = "/api/*"
+      target_origin_id       = "backend-alb"
+      viewer_protocol_policy = "redirect-to-https"
+      allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+      cached_methods         = ["GET", "HEAD"]
+      compress               = true
+
+      cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+      origin_request_policy_id = aws_cloudfront_origin_request_policy.api.id
+    }
   }
 
   restrictions {

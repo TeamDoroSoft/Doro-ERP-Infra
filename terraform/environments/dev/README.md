@@ -20,11 +20,19 @@
 
 Redis와 MongoDB는 Foundation과 State 수명주기를 분리한다. Foundation Apply 후 각각 [`redis/`](redis/README.md)와 [`mongodb-atlas/`](mongodb-atlas/README.md)에서 실행한다.
 
-ALB는 이 Stack에서 직접 만들지 않는다. Terraform은 Controller의 AWS 권한만 만들고,
-Helm으로 Controller를 설치한 뒤 Dev Alpha Ingress를 Kubernetes에 적용할 때 ALB가 생성된다.
-`/api/*` CloudFront VPC Origin은 `origin.doro.minseok.click`을 통해 내부 ALB의 HTTPS 443
-Listener에 연결한다. TLS는 ALB에서 종료되고 Edge Pod Target 구간은 HTTP다. Terraform
-Plan 전에 Controller와 Ingress를 적용해 `doro-erp-dev-alpha` ALB가 존재해야 한다.
+ALB는 이 Stack에서 직접 만들지 않는다. Terraform은 Controller의 AWS 권한과 ALB Frontend
+Security Group·Regional ACM 인증서를 만들고, AWS Load Balancer Controller가 Gateway API
+Manifest를 조정해 `doro-erp-dev-alpha-gateway` Internal ALB를 생성한다. `/api/*` CloudFront
+VPC Origin은 `origin.doro.minseok.click`을 통해 이 ALB의 HTTPS 443 Listener에 연결한다.
+TLS는 ALB에서 종료되고 Edge Pod Target 구간은 HTTP다.
+
+순환 의존성을 피하기 위해 `enable_gateway_backend=false`인 Foundation Apply와 Gateway ALB
+생성 후 `enable_gateway_backend=true`인 Backend Origin Apply를 분리한다. 첫 단계에서는
+Gateway ALB Data Source, VPC Origin, Origin Route 53 Alias와 ALB 전용 CloudWatch 경보를
+만들지 않는다. 기존 `team2` VPC와 Terraform State·Frontend S3를 삭제하거나 가져오지 않는다.
+이 변수는 안전을 위해 기본값이 없으며 매 Plan에서 `terraform.tfvars`로 명시해야 한다.
+기존 CloudFront Backend가 서비스 중인 환경에서 `false`를 적용하면 Backend Origin이 제거되므로
+재구축 또는 승인된 제거 작업이 아니라면 적용하지 않는다.
 
 ## 1. CloudShell 준비
 
@@ -106,51 +114,66 @@ nano terraform.tfvars
 
 `eks_public_access_cidrs`의 예제 IP를 출력된 IP의 `/32`로 바꾼다. `0.0.0.0/0`은 검증 단계에서 거절된다.
 
-## 4.1 ALB HTTPS 최초 적용 순서
+## 4.1 Gateway API와 Backend Origin 적용 순서
 
-이 Stack은 Controller가 만든 `doro-erp-dev-alpha` ALB를 Data Source로 조회하므로 새 환경에서는
-인증서와 Security Group, Ingress, CloudFront를 한 번에 만들 수 없다. 다음 순서를 지킨다.
-기존 `http-only` Origin을 이 최종 구성으로 바로 전환하면 Security Group 80 제거부터
-CloudFront HTTPS 배포 완료까지 API가 일시 중단되므로 Dev 점검 시간에 연속 실행한다.
-무중단 전환이 필요하면 HTTP·HTTPS Listener와 80·443 규칙을 동시에 유지하는 별도 과도기
-Overlay/Plan을 먼저 승인하고, CloudFront 전환 확인 뒤 제거해야 한다. 최종 Manifest에 HTTP
-Listener를 남겨 무중단 단계를 대신하지 않는다.
+### 1단계: Foundation Apply
 
-1. Regional ACM 인증서와 ALB Security Group만 먼저 Target Plan으로 생성한다. Target Apply는
-   최초 순환 의존성을 끊는 Bootstrap에만 사용하고 저장한 Plan을 검토한 뒤 적용한다.
+`terraform.tfvars`에서 다음 값을 유지한다.
 
-```bash
-terraform plan \
-  -target=aws_acm_certificate_validation.alpha_alb \
-  -target=aws_security_group.alpha_alb_frontend \
-  -target=aws_vpc_security_group_ingress_rule.alpha_alb_from_cloudfront \
-  -target=aws_vpc_security_group_egress_rule.alpha_alb_all \
-  -out=alb-https-bootstrap.tfplan
-terraform apply alb-https-bootstrap.tfplan
+```hcl
+enable_gateway_backend = false
 ```
 
-2. Controller와 `doro-alpha-alb` IngressClass를 준비한 뒤, 실제 Image Tag와 Migration 준비가
-   끝난 정상 Application Release 절차로 Dev Alpha Overlay를 적용한다. Edge Ingress의
-`tls.hosts`를 통해 Controller가 Regional ACM 인증서를 탐색하고 HTTPS 443 Listener를 만든다.
-   Base Ingress 단독 적용은 Dev 인증서 Host와 Security Group이 없으므로 ALB Release 절차로
-   사용하지 않는다.
+아래의 일반 Plan·Apply로 EKS, Controller IAM, ALB Security Group과 Regional ACM 인증서를
+먼저 준비한다. Gateway ALB가 없어도 Plan이 가능하다. 기존 VPC와 S3 삭제가 Plan에 있으면
+적용하지 않는다.
 
-   API Cache Behavior의 전용 Origin Request Policy는 Cookie·Query·CSRF 등 Viewer 값을
-   보존하고 `Host`만 `origin.doro.minseok.click`로 바꿔 CloudFront의 Origin TLS 이름 검증과
-   ALB 인증서가 일치하게 한다.
+이 단계의 CloudFront에는 Backend Origin과 `/api/*` Behavior가 없으므로 API는 배포 준비
+상태가 아니다. Application Smoke Test와 사용자 Traffic은 3단계 적용 후 시작한다.
 
-3. Listener가 `HTTPS:443`, 올바른 Certificate ARN, HTTP Target Group을 사용하는지 확인한다.
+### 2단계: Gateway ALB 생성
+
+[`deploy/platform/aws-load-balancer-controller`](../../../deploy/platform/aws-load-balancer-controller/README.md)의
+절차로 Gateway API CRD, Controller, GatewayClass와 Dev Alpha Overlay를 적용한다. 새 ALB와
+Edge Target이 준비될 때까지 CloudFront Backend를 활성화하지 않는다.
 
 ```bash
+aws elbv2 describe-load-balancers \
+  --names doro-erp-dev-alpha-gateway \
+  --query 'LoadBalancers[0].{Arn:LoadBalancerArn,DNS:DNSName,Scheme:Scheme,State:State.Code}' \
+  --output table
+```
+
+Listener가 `HTTPS:443`, 올바른 Regional Certificate, HTTP Target Group을 사용하는지 확인한다.
+
+```bash
+GATEWAY_ALB_ARN="$(aws elbv2 describe-load-balancers \
+  --names doro-erp-dev-alpha-gateway \
+  --query 'LoadBalancers[0].LoadBalancerArn' \
+  --output text)"
+
 aws elbv2 describe-listeners \
-  --load-balancer-arn "$(aws elbv2 describe-load-balancers \
-    --names doro-erp-dev-alpha --query 'LoadBalancers[0].LoadBalancerArn' --output text)"
+  --load-balancer-arn "${GATEWAY_ALB_ARN}" \
+  --output table
+
 terraform output -raw alb_origin_certificate_arn
 ```
 
-확인이 끝난 뒤 아래의 전체 `terraform plan`과 Apply를 실행한다. 이 마지막 단계에서
-`origin.doro.minseok.click` ALB Alias와 CloudFront `https-only` VPC Origin이 연결된다.
-기존 HTTP ALB를 전환할 때도 443 Listener 검증 전에는 CloudFront를 먼저 변경하지 않는다.
+### 3단계: Backend Origin Apply
+
+Target이 모두 Healthy인 것을 확인한 뒤 `terraform.tfvars`를 변경한다.
+
+```hcl
+enable_gateway_backend = true
+```
+
+다시 전체 Plan을 저장하고 검토한다. 이 Plan에서 Gateway ALB Data Source를 조회하고
+CloudFront VPC Origin, `origin.doro.minseok.click` Alias, `/api/*` Cache Behavior와 Gateway
+ALB CloudWatch 경보를 추가한다. 무관한 EKS·EC2·RDS 교체나 VPC·S3 삭제가 있으면 적용하지 않는다.
+
+API Cache Behavior의 Origin Request Policy는 Cookie·Query·CSRF 등 Viewer 값을 보존하고
+`Host`만 `origin.doro.minseok.click`로 바꿔 CloudFront Origin TLS 이름과 ALB 인증서를
+일치시킨다.
 
 ## 5. Init·Plan
 

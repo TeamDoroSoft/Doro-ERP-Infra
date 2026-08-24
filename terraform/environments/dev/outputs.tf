@@ -80,7 +80,12 @@ output "frontend_url" {
 
 output "backend_api_base_url" {
   description = "Dev Alpha API base URL routed by CloudFront to the internal ALB."
-  value       = "https://${var.domain_name}/api"
+  value       = var.enable_gateway_backend ? "https://${var.domain_name}/api" : null
+}
+
+output "gateway_backend_enabled" {
+  description = "Whether CloudFront, Route 53, and ALB alarms are connected to the Gateway API ALB."
+  value       = var.enable_gateway_backend
 }
 
 output "alb_origin_certificate_arn" {
@@ -91,6 +96,21 @@ output "alb_origin_certificate_arn" {
 output "alb_origin_hostname" {
   description = "TLS-validated CloudFront VPC origin hostname for the internal ALB."
   value       = var.alb_origin_domain_name
+}
+
+output "gateway_alb_name" {
+  description = "Internal ALB name provisioned by the AWS Load Balancer Controller Gateway API."
+  value       = var.enable_gateway_backend ? data.aws_lb.gateway[0].name : null
+}
+
+output "gateway_alb_dns_name" {
+  description = "Internal ALB DNS name provisioned by the AWS Load Balancer Controller Gateway API."
+  value       = var.enable_gateway_backend ? data.aws_lb.gateway[0].dns_name : null
+}
+
+output "gateway_alb_security_group_id" {
+  description = "Terraform-managed frontend security group attached to the Gateway API ALB."
+  value       = aws_security_group.alpha_alb_frontend.id
 }
 
 output "cloudwatch_container_log_groups" {

@@ -5,6 +5,7 @@ resources:
   - ../../../base
   - namespace.yaml
   - network-policies.yaml
+  - gateway.yaml
 components:
   - ../../../components/secrets-manager
 patches:
@@ -33,28 +34,25 @@ patches:
         path: /data/LOGGING_STRUCTURED_JSON_STACKTRACE_MAX_LENGTH
         value: "16384"
   - target:
-      kind: Ingress
+      kind: HTTPRoute
+      name: edge-api-route
     patch: |-
       - op: replace
-        path: /spec/ingressClassName
-        value: doro-alpha-alb
+        path: /spec/parentRefs/0/name
+        value: doro-alpha-gateway
+  - target:
+      kind: TargetGroupConfiguration
+      name: edge-api-tgconfig
+    patch: |-
       - op: add
-        path: /metadata/annotations/alb.ingress.kubernetes.io~1security-groups
-        value: doro-erp-dev-alpha-alb
+        path: /spec/defaultConfiguration/tags/Environment
+        value: dev
       - op: add
-        path: /metadata/annotations/alb.ingress.kubernetes.io~1manage-backend-security-group-rules
-        value: "true"
+        path: /spec/defaultConfiguration/tags/Cell
+        value: alpha
       - op: add
-        path: /metadata/annotations/alb.ingress.kubernetes.io~1listen-ports
-        value: '[{"HTTPS":443}]'
-      - op: add
-        path: /metadata/annotations/alb.ingress.kubernetes.io~1ssl-policy
-        value: ELBSecurityPolicy-TLS13-1-2-2021-06
-      - op: add
-        path: /spec/tls
-        value:
-          - hosts:
-              - origin.doro.minseok.click
+        path: /spec/defaultConfiguration/tags/Team
+        value: team2
   - target:
       kind: ConfigMap
       name: edge-api-runtime

@@ -2,7 +2,7 @@
 
 Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 운영 계약을 소유한다.
 
-> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값, Edge 단일 Public Ingress와 Dev Alpha NetworkPolicy가 구현되어 있다. 모든 Runtime은 최소 2 Replica와 서비스별 HPA·PDB를 사용한다. Dev Worker는 비용과 현재 운영 제약을 반영해 단일 AZ에서 서로 다른 Node로 분산하며, Managed Node Group과 Cluster Autoscaler가 Node 2대에서 최대 4대까지 확장한다. EKS Metrics Server, CloudWatch Observability Add-on, Container Insights Log 보존, 운영 SNS Topic과 Node·Pod·DLQ·ALB 최소 경보도 코드에 반영되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. ALB HTTPS Listener·Regional ACM 인증서와 CloudFront HTTPS VPC Origin 구성도 코드에 반영되어 있지만 실제 AWS Listener·인증서 연결, Autoscaler Scale-out/in, Log 수집·Alarm 전달, CNI Policy Enforcement와 가용성 장애 검증은 별도로 확인해야 한다. 자동 CD와 Argo CD는 Dev 수동 Release를 검증한 뒤 도입한다.
+> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값, Edge 단일 Gateway API HTTPRoute와 Dev Alpha NetworkPolicy가 구현되어 있다. 기존 Ingress Manifest는 제거됐다. 모든 Runtime은 최소 2 Replica와 서비스별 HPA·PDB를 사용한다. Dev Worker는 비용과 현재 운영 제약을 반영해 단일 AZ에서 서로 다른 Node로 분산하며, Managed Node Group과 Cluster Autoscaler가 Node 2대에서 최대 4대까지 확장한다. EKS Metrics Server, CloudWatch Observability Add-on, Container Insights Log 보존, 운영 SNS Topic과 Node·Pod·DLQ·ALB 최소 경보도 코드에 반영되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. Gateway API ALB HTTPS Listener·Regional ACM 인증서와 CloudFront HTTPS VPC Origin 구성은 코드에 반영되어 있지만 실제 Gateway Condition·Listener·인증서·Target Health, Autoscaler Scale-out/in, Log 수집·Alarm 전달, CNI Policy Enforcement와 가용성 장애 검증은 별도로 확인해야 한다. 자동 CD와 Argo CD는 Dev 수동 Release를 검증한 뒤 도입한다.
 >
 > 목표 구조와 구현 완료를 혼동하지 않는다. 실제 인프라가 추가되면 실행 명령, 검증 명령과 복구 절차를 같은 변경에 포함한다.
 
@@ -86,7 +86,7 @@ Doro-ERP-Infra/
 └─ deploy/
    ├─ base/                   # 여섯 Application 공통 Manifest
    ├─ components/             # Secrets Manager 등 선택 기능
-   ├─ platform/               # Cluster 공통 Controller와 IngressClass
+   ├─ platform/               # Cluster 공통 Controller와 GatewayClass
    └─ overlays/dev/alpha/     # Dev Alpha 조합
 ```
 
@@ -105,12 +105,12 @@ Kubernetes Manifest의 현재 범위와 배포 전 필수 조건은 [deploy READ
 - Local과 CI는 고정 Version, Health Check와 재실행 가능한 Bootstrap을 사용한다.
 - Dev와 운영 후보는 동일 Image를 사용하고 설정·Secret만 환경별로 분리한다.
 - 목표 배포 플랫폼은 AWS EKS·Argo CD로 확정했다. Kustomize Base, Dev Alpha 조합,
-  AWS Load Balancer Controller IAM·설치 값과 Public Ingress는 구현되어 있고 실제 Runtime 설정·GitOps는 후속 단계다.
+  AWS Load Balancer Controller IAM·설치 값과 Edge 단일 Public HTTPRoute는 구현되어 있고 실제 Gateway API AWS 적용·GitOps는 후속 단계다.
 - `.env`와 실제 Credential은 커밋하지 않는다. 예시 파일에는 이름과 형식만 둔다.
 
 ## Routing과 신뢰 경계
 
-Frontend는 공개 Routing 계층을 통해 업무 API를 호출하고 Database, Redis, MongoDB와 SQS에 직접 연결하지 않는다. 목표 Routing은 Route 53→CloudFront·WAF→Cell별 내부 ALB→Edge Ingress이며 다음 논리 경계를 유지한다.
+Frontend는 공개 Routing 계층을 통해 업무 API를 호출하고 Database, Redis, MongoDB와 SQS에 직접 연결하지 않는다. 목표 Routing은 Route 53→CloudFront·WAF→CloudFront VPC Origin→Gateway API가 생성한 Cell별 내부 ALB→Edge HTTPRoute이며 다음 논리 경계를 유지한다.
 
 - 외부 TLS 종료와 API Route는 환경별로 한 진입점을 제공한다.
 - POS와 Kiosk의 공개 API 범위는 Backend 인증·인가로 최종 제한한다.
@@ -263,7 +263,7 @@ Application 코드 변경이 없는 서비스는 다시 배포하지 않을 수 
 
 ## AWS 구현 전 결정 사항
 
-AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·ALB와 Edge 단일 Ingress는 목표 방향으로 확정했다. 실제 자원을 만들기 전에는 다음 운영 수치와 제품 선택을 확정한다.
+AWS, `ap-northeast-2`, EKS·Argo CD GitOps, Cell별 CloudFront·Gateway API ALB와 Edge 단일 HTTPRoute는 목표 방향으로 확정했다. 실제 자원을 만들기 전에는 다음 운영 수치와 제품 선택을 확정한다.
 
 - RDS PostgreSQL의 Instance Class·Multi-AZ·Cell별 분리 수준
 - MongoDB Atlas 운영 Tier·PrivateLink·백업 보존·복구 목표
