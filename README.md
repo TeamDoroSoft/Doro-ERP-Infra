@@ -2,9 +2,11 @@
 
 Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 운영 계약을 소유한다.
 
-> 현재 상태: Local 통합 환경, Dev Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값, Edge 단일 Gateway API HTTPRoute와 Dev Alpha NetworkPolicy가 구현되어 있다. 기존 Ingress Manifest는 제거됐다. 모든 Runtime은 최소 2 Replica와 서비스별 HPA·PDB를 사용한다. Dev Worker는 비용과 현재 운영 제약을 반영해 단일 AZ에서 서로 다른 Node로 분산하며, Managed Node Group과 Cluster Autoscaler가 Node 2대에서 최대 4대까지 확장한다. EKS Metrics Server, CloudWatch Observability Add-on, Container Insights Log 보존, 운영 SNS Topic과 Node·Pod·DLQ·ALB 최소 경보도 코드에 반영되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. Gateway API ALB HTTPS Listener·Regional ACM 인증서와 CloudFront HTTPS VPC Origin 구성은 코드에 반영되어 있지만 실제 Gateway Condition·Listener·인증서·Target Health, Autoscaler Scale-out/in, Log 수집·Alarm 전달, CNI Policy Enforcement와 가용성 장애 검증은 별도로 확인해야 한다. 자동 CD와 Argo CD는 Dev 수동 Release를 검증한 뒤 도입한다.
+> 현재 상태: Local 통합 환경, Prod Alpha AWS Foundation·ElastiCache Redis·MongoDB Atlas Terraform과 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값, Edge 단일 Gateway API HTTPRoute와 Prod Alpha NetworkPolicy가 구현되어 있다. 기존 Ingress Manifest는 제거됐다. 모든 Runtime은 최소 2 Replica와 서비스별 HPA·PDB를 사용한다. Prod Worker는 비용과 현재 운영 제약을 반영해 단일 AZ에서 서로 다른 Node로 분산하며, Managed Node Group과 Cluster Autoscaler가 Node 2대에서 최대 4대까지 확장한다. EKS Metrics Server, CloudWatch Observability Add-on, Container Insights Log 보존, 운영 SNS Topic과 Node·Pod·DLQ·ALB 최소 경보도 코드에 반영되어 있다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되어 있다. Gateway API ALB HTTPS Listener·Regional ACM 인증서와 CloudFront HTTPS VPC Origin 구성은 코드에 반영되어 있지만 실제 Gateway Condition·Listener·인증서·Target Health, Autoscaler Scale-out/in, Log 수집·Alarm 전달, CNI Policy Enforcement와 가용성 장애 검증은 별도로 확인해야 한다. 자동 CD와 Argo CD는 Prod 수동 Release를 검증한 뒤 도입한다.
 >
 > 목표 구조와 구현 완료를 혼동하지 않는다. 실제 인프라가 추가되면 실행 명령, 검증 명령과 복구 절차를 같은 변경에 포함한다.
+
+`prod`는 이 프로젝트의 최종 배포·시연용 단일 AWS 환경 이름이다. 현재 비용 최적화 구성은 상용 운영 수준의 Multi-AZ 가용성을 의미하지 않는다.
 
 상위 제품·기술 기준은 다음 문서를 따른다.
 
@@ -14,7 +16,7 @@ Doro SaaS POS·Kiosk의 로컬 통합 환경, Cloud 자원, 배포 Manifest와 �
 - [개발 일정 WBS](<../Docs/의사결정/개발 일정 WBS.md>)
 - [MSA 서비스 컨텍스트](../Docs/Specifications/MSA/README.md)
 
-Dev 실행 진입점은 [Foundation Terraform](terraform/environments/dev/README.md), [Redis Terraform](terraform/environments/dev/redis/README.md), [MongoDB Atlas Terraform](terraform/environments/dev/mongodb-atlas/README.md) 순서로 사용한다.
+Prod 실행 진입점은 [Network Terraform](terraform/environments/prod/network/README.md), [Foundation Terraform](terraform/environments/prod/README.md), [Redis Terraform](terraform/environments/prod/redis/README.md), [MongoDB Atlas Terraform](terraform/environments/prod/mongodb-atlas/README.md) 순서로 사용한다.
 
 ## 목표 Runtime
 
@@ -41,7 +43,7 @@ Data
    └─ audit-events + DLQ
 ```
 
-관계형 업무 Database는 PostgreSQL로 통일한다. 개발 환경에서는 하나의 Instance에 네 Database를 둘 수 있지만 서비스별 Runtime Role과 Migration Role을 분리한다. Store Access Session은 ElastiCache Redis, Audit 문서는 MongoDB Atlas를 사용하고 둘 다 Dev Alpha 전용으로 격리한다.
+관계형 업무 Database는 PostgreSQL로 통일한다. 개발 환경에서는 하나의 Instance에 네 Database를 둘 수 있지만 서비스별 Runtime Role과 Migration Role을 분리한다. Store Access Session은 ElastiCache Redis, Audit 문서는 MongoDB Atlas를 사용하고 둘 다 Prod Alpha 전용으로 격리한다.
 
 ## Application 배포 단위
 
@@ -80,17 +82,18 @@ Doro-ERP-Infra/
 │  ├─ compose.yaml
 │  └─ bootstrap/
 ├─ terraform/
-│  └─ environments/dev/
+│  └─ environments/prod/
+│     ├─ network/
 │     ├─ redis/
 │     └─ mongodb-atlas/
 └─ deploy/
    ├─ base/                   # 여섯 Application 공통 Manifest
    ├─ components/             # Secrets Manager 등 선택 기능
    ├─ platform/               # Cluster 공통 Controller와 GatewayClass
-   └─ overlays/dev/alpha/     # Dev Alpha 조합
+   └─ overlays/prod/alpha/     # Prod Alpha 조합
 ```
 
-Foundation, Redis, MongoDB Atlas는 서로 다른 S3 State Key를 사용하므로 각각 독립적으로 Plan·Apply·Destroy한다.
+Network, Foundation, Redis, MongoDB Atlas는 서로 다른 S3 State Key를 사용한다. Apply는 Network→Foundation→Redis→Atlas, Destroy는 반대 순서로 수행한다.
 Kubernetes Manifest의 현재 범위와 배포 전 필수 조건은 [deploy README](deploy/README.md)를 따른다.
 
 ## 환경별 책임
@@ -99,12 +102,12 @@ Kubernetes Manifest의 현재 범위와 배포 전 필수 조건은 [deploy READ
 |---|---|---|---|
 | Local | 개발과 재현 가능한 통합 테스트 | PostgreSQL, MongoDB, Redis, LocalStack SQS | 폐기 가능한 개발 데이터 |
 | CI | PR 검증과 장애·계약 테스트 | 격리된 임시 의존성, 여섯 App Health | Job 종료 시 폐기 |
-| Dev | 팀 통합·시연 | 불변 Image, 실제 또는 승인된 SQS 환경, 환경별 Secret | Test Key·비운영 데이터만 사용 |
+| Prod | 최종 배포·시연 단일 환경 | 불변 Image, 실제 또는 승인된 SQS 환경, 환경별 Secret | Test Key·비운영 데이터만 사용 |
 | Production 후보 | 향후 운영 | 관리형 제품, TLS, Backup, 관측, Rollback | RPO·RTO·비용 목표 결정 후 활성화 |
 
 - Local과 CI는 고정 Version, Health Check와 재실행 가능한 Bootstrap을 사용한다.
-- Dev와 운영 후보는 동일 Image를 사용하고 설정·Secret만 환경별로 분리한다.
-- 목표 배포 플랫폼은 AWS EKS·Argo CD로 확정했다. Kustomize Base, Dev Alpha 조합,
+- Prod와 운영 후보는 동일 Image를 사용하고 설정·Secret만 환경별로 분리한다.
+- 목표 배포 플랫폼은 AWS EKS·Argo CD로 확정했다. Kustomize Base, Prod Alpha 조합,
   AWS Load Balancer Controller IAM·설치 값과 Edge 단일 Public HTTPRoute는 구현되어 있고 실제 Gateway API AWS 적용·GitOps는 후속 단계다.
 - `.env`와 실제 Credential은 커밋하지 않는다. 예시 파일에는 이름과 형식만 둔다.
 
@@ -172,7 +175,7 @@ Frontend는 공개 Routing 계층을 통해 업무 API를 호출하고 Database,
 - Audit는 MongoDB와 `audit-events` 소비 설정만 받는다.
 - Secret 원문·Digest를 Terraform Output, Plan, CI Log, Container Image와 Application Metric에 출력하지 않는다.
 
-EKS Workload의 AWS 자원 권한은 Pod Identity로 분리한다. Dev Alpha는 AWS 공식 `aws-secrets-store-csi-driver-provider` EKS Add-on과 Secrets Store CSI Driver를 사용한다. 서비스별 Secret과 방향별 HMAC Secret을 `SecretProviderClass`로 선택해 Kubernetes Secret에 동기화하고, Deployment는 `envFrom`으로 주입한다. 실행 중인 JVM 환경변수는 자동 갱신되지 않으므로 Secret 회전 뒤 대상 Deployment를 Rollout한다.
+EKS Workload의 AWS 자원 권한은 Pod Identity로 분리한다. Prod Alpha는 AWS 공식 `aws-secrets-store-csi-driver-provider` EKS Add-on과 Secrets Store CSI Driver를 사용한다. 서비스별 Secret과 방향별 HMAC Secret을 `SecretProviderClass`로 선택해 Kubernetes Secret에 동기화하고, Deployment는 `envFrom`으로 주입한다. 실행 중인 JVM 환경변수는 자동 갱신되지 않으므로 Secret 회전 뒤 대상 Deployment를 Rollout한다.
 
 ## Idempotency Key Material 회전
 
@@ -240,12 +243,12 @@ Infra 구현 시 Pipeline은 다음 순서와 책임을 갖는다.
 1. PR에서 Markdown Link, Compose·Terraform·Manifest 정적 검증과 Secret 검사를 수행한다.
 2. 관련 저장소의 Required Check로 Service Root `./gradlew check`와 Front의 Lint·Unit·Build를 통과시킨다.
 3. 여섯 App Image를 같은 Git SHA Tag로 개별 생성하고 취약점·구성 검사를 수행한다.
-4. Dev에서는 ECR Tag와 Digest의 일치를 확인하고 대상 서비스 Digest만 Infra Manifest에 기록한 뒤 환경 승인과 배포 Diff를 검토한다.
+4. Prod에서는 ECR Tag와 Digest의 일치를 확인하고 대상 서비스 Digest만 Infra Manifest에 기록한 뒤 환경 승인과 배포 Diff를 검토한다.
 5. Database Migration은 서비스별 Migration Credential을 쓰는 제한된 단계에서 실행한다.
 6. 새 Version을 Rollout하고 Health·Smoke·핵심 Event 수렴을 확인한다.
 7. 실패하면 Git에 기록한 이전 Image Digest로 Application을 되돌리되, 이미 적용된 Database Migration은 Forward-fix 원칙을 따른다.
 
-현재 Dev CD는 자동화하지 않는다. 운영자가 승인한 Digest를 `deploy/scripts/record-dev-alpha-image.sh`로 기록하고 수동 Apply한다. Argo CD는 이 절차와 관측 신호를 Dev에서 검증한 뒤 같은 Git 목표 상태를 읽는 방식으로 도입한다.
+현재 Prod CD는 자동화하지 않는다. 운영자가 승인한 Digest를 `deploy/scripts/record-prod-alpha-image.sh`로 기록하고 수동 Apply한다. Argo CD는 이 절차와 관측 신호를 Prod에서 검증한 뒤 같은 Git 목표 상태를 읽는 방식으로 도입한다.
 
 Application 코드 변경이 없는 서비스는 다시 배포하지 않을 수 있지만, 공통 계약·Platform 또는 Infra 설정 변경의 영향 서비스는 명시적으로 선택한다.
 

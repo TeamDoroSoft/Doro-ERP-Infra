@@ -6,7 +6,7 @@ Runtime Pod에는 `SPRING_FLYWAY_ENABLED=false`가 주입되고, 각 Migration J
 
 ## 보안 경계
 
-- Terraform은 `doro-erp/dev/alpha/migration/{service}` Secret 4개를 만든다.
+- Terraform은 `doro-erp/prod/alpha/migration/{service}` Secret 4개를 만든다.
 - Migration별 전용 IAM Role, EKS Pod Identity와 ServiceAccount를 사용한다.
 - Runtime Pod Identity는 Migration Secret을 읽을 수 없다.
 - URL은 Manifest에 저장하지만 Username과 Password는 Secrets Manager/CSI로만 주입한다.
@@ -25,10 +25,10 @@ Runtime Pod에는 `SPRING_FLYWAY_ENABLED=false`가 주입되고, 각 Migration J
 
 | Secret 이름 | `DB_MIGRATION_USERNAME` |
 |---|---|
-| `doro-erp/dev/alpha/migration/store-access` | `store_access_migration` |
-| `doro-erp/dev/alpha/migration/commerce` | `commerce_migration` |
-| `doro-erp/dev/alpha/migration/payment` | `payment_migration` |
-| `doro-erp/dev/alpha/migration/queue` | `queue_migration` |
+| `doro-erp/prod/alpha/migration/store-access` | `store_access_migration` |
+| `doro-erp/prod/alpha/migration/commerce` | `commerce_migration` |
+| `doro-erp/prod/alpha/migration/payment` | `payment_migration` |
+| `doro-erp/prod/alpha/migration/queue` | `queue_migration` |
 
 ## Migration Image Build
 
@@ -65,13 +65,13 @@ ECR Repository는 Immutable Tag를 사용하므로 같은 Tag를 덮어쓰지 �
 1. Foundation Terraform을 먼저 Apply해 네 Migration Secret, IAM Role과 Pod Identity를 만든다.
 2. AWS Console에서 네 Migration Secret JSON을 입력한다.
 3. 위 Image를 Build·Push한다.
-4. `deploy/migrations/dev-alpha/kustomization.yaml`의 네 `newTag`를 실제 `MIGRATION_TAG`로 바꾼다.
+4. `deploy/migrations/prod-alpha/kustomization.yaml`의 네 `newTag`를 실제 `MIGRATION_TAG`로 바꾼다.
 5. Migration Overlay만 먼저 적용한다.
 
 ```bash
 cd ~/Doro-ERP-Infra
-kubectl kustomize deploy/migrations/dev-alpha
-kubectl apply -k deploy/migrations/dev-alpha
+kubectl kustomize deploy/migrations/prod-alpha
+kubectl apply -k deploy/migrations/prod-alpha
 
 kubectl wait \
   --for=condition=complete \
@@ -109,7 +109,7 @@ kubectl delete job \
   queue-db-migration \
   -n doro-alpha
 
-kubectl apply -k deploy/migrations/dev-alpha
+kubectl apply -k deploy/migrations/prod-alpha
 ```
 
 실패하면 Application을 배포하지 말고 해당 Job의 Pod Event와 Flyway Log를 먼저 확인한다.

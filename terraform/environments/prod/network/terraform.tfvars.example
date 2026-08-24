@@ -1,0 +1,14 @@
+aws_account_id = "727646470302"
+aws_region     = "ap-northeast-2"
+vpc_cidr       = "10.24.0.0/16"
+
+availability_zones = ["ap-northeast-2a", "ap-northeast-2c"]
+
+subnet_cidrs = {
+  public_a = "10.24.0.0/24"
+  public_c = "10.24.1.0/24"
+  app_a    = "10.24.10.0/24"
+  app_c    = "10.24.11.0/24"
+  data_a   = "10.24.20.0/24"
+  data_c   = "10.24.21.0/24"
+}

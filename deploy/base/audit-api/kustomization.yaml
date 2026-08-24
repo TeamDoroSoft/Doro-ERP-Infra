@@ -16,7 +16,7 @@ configMapGenerator:
       - SPRING_PROFILES_ACTIVE=prod
       - AWS_REGION=ap-northeast-2
       - AUDIT_PORT=8085
-      - AUDIT_DEPLOYMENT_ENVIRONMENT=dev
+      - AUDIT_DEPLOYMENT_ENVIRONMENT=prod
       - AUDIT_CELL_ID=alpha
       - AUDIT_SQS_LISTENER_ENABLED=false
       - AUDIT_DLQ_MONITORING_ENABLED=false

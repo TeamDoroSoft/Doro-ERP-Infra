@@ -15,7 +15,7 @@ data "aws_iam_policy_document" "workload_boundary" {
 
 resource "aws_iam_policy" "workload_boundary" {
   name        = local.workload_boundary_name
-  description = "Permissions boundary for Doro ERP dev workload and service roles."
+  description = "Permissions boundary for Doro ERP prod workload and service roles."
   policy      = data.aws_iam_policy_document.workload_boundary.json
 }
 
@@ -33,14 +33,14 @@ data "aws_iam_policy_document" "terraform_assume_role" {
     condition {
       test     = "StringLike"
       variable = "sts:RoleSessionName"
-      values   = ["doro-erp-dev-*"]
+      values   = ["doro-erp-prod-*"]
     }
   }
 }
 
 resource "aws_iam_role" "terraform_execution" {
   name                 = local.terraform_role_name
-  description          = "Terraform execution role for the Doro ERP dev environment."
+  description          = "Terraform execution role for the Doro ERP prod environment."
   assume_role_policy   = data.aws_iam_policy_document.terraform_assume_role.json
   max_session_duration = 3600
 }
@@ -73,6 +73,7 @@ data "aws_iam_policy_document" "terraform_iam_management" {
     effect = "Allow"
     actions = [
       "iam:GetInstanceProfile",
+      "iam:GetGroup",
       "iam:GetPolicy",
       "iam:GetPolicyVersion",
       "iam:GetRole",
@@ -161,11 +162,10 @@ data "aws_iam_policy_document" "terraform_iam_management" {
     resources = [local.project_policy_arn_pattern]
   }
 
-  # Only the policy content is managed — the group it's attached to
-  # (team2-doro-load-group) is intentionally left alone. See
-  # bootstrap/team2-doroload-ssm-access-policy.tf.
+  # The operator group itself remains an account prerequisite. Bootstrap owns
+  # the Prod SSM policy and its attachment to that group.
   statement {
-    sid    = "ManageTeam2DoroloadSsmAccessPolicy"
+    sid    = "ManageProdSsmAccessPolicy"
     effect = "Allow"
     actions = [
       "iam:CreatePolicy",
@@ -176,13 +176,24 @@ data "aws_iam_policy_document" "terraform_iam_management" {
       "iam:TagPolicy",
       "iam:UntagPolicy"
     ]
-    resources = [local.team2_doroload_ssm_access_policy_arn]
+    resources = [local.prod_ssm_access_policy_arn]
+  }
+
+  statement {
+    sid    = "AttachProdSsmAccessPolicy"
+    effect = "Allow"
+    actions = [
+      "iam:AttachGroupPolicy",
+      "iam:DetachGroupPolicy",
+      "iam:ListAttachedGroupPolicies"
+    ]
+    resources = [data.aws_iam_group.team2_operators.arn]
   }
 
   # doro-erp-service-ecr-publisher is the canonical GitHub Actions role for
-  # publishing Doro ERP service images to ECR (Doro-ERP-Service's dev
+  # publishing Doro ERP service images to ECR (Doro-ERP-Service's prod
   # Environment variable AWS_ECR_PUSH_ROLE_ARN points at it). It replaces
-  # the never-used doro-erp-dev-github-ecr-push, which has been removed.
+  # the never-used doro-erp-prod-github-ecr-push, which has been removed.
   statement {
     sid    = "ManageDoroErpServiceEcrPublisher"
     effect = "Allow"
@@ -266,12 +277,12 @@ data "aws_iam_policy_document" "terraform_iam_management" {
 }
 
 resource "aws_iam_role_policy" "terraform_iam_management" {
-  name   = "doro-erp-dev-iam-management"
+  name   = "doro-erp-prod-iam-management"
   role   = aws_iam_role.terraform_execution.id
   policy = data.aws_iam_policy_document.terraform_iam_management.json
 }
 
-# PowerUserAccess covers the non-IAM AWS resources in the Dev stack. IAM role
+# PowerUserAccess covers the non-IAM AWS resources in the Prod stack. IAM role
 # creation remains constrained by the project-name, tag and boundary rules above.
 resource "aws_iam_role_policy_attachment" "terraform_power_user" {
   role       = aws_iam_role.terraform_execution.name
@@ -292,7 +303,7 @@ data "aws_iam_policy_document" "terraform_service_linked_roles" {
 }
 
 resource "aws_iam_role_policy" "terraform_service_linked_roles" {
-  name   = "doro-erp-dev-service-linked-roles"
+  name   = "doro-erp-prod-service-linked-roles"
   role   = aws_iam_role.terraform_execution.id
   policy = data.aws_iam_policy_document.terraform_service_linked_roles.json
 }

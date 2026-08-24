@@ -17,3 +17,8 @@ output "workload_permissions_boundary_arn" {
   description = "Permissions boundary required for Doro ERP workload roles."
   value       = aws_iam_policy.workload_boundary.arn
 }
+
+output "prod_ssm_access_policy_arn" {
+  description = "Policy attached to the existing team2 operator group for audited Prod SSM sessions."
+  value       = aws_iam_policy.prod_ssm_access.arn
+}

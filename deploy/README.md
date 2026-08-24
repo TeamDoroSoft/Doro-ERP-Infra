@@ -16,11 +16,11 @@ deploy/
 ├─ components/
 │  └─ secrets-manager/
 ├─ migrations/
-│  └─ dev-alpha/
+│  └─ prod-alpha/
 ├─ platform/
 │  └─ aws-load-balancer-controller/  # Controller 값과 Cluster 공통 GatewayClass
 └─ overlays/
-   └─ dev/alpha/
+   └─ prod/alpha/
 ```
 
 각 Base는 다음 Resource를 소유한다.
@@ -33,17 +33,17 @@ deploy/
 - `TargetGroupConfiguration`: Edge Target Group의 IP Target과 Readiness Health Check를 정의한다.
 - `ConfigMap`: Port, Region과 안전한 기본 Feature Flag를 환경 변수로 제공한다.
 
-Dev Alpha Overlay는 여섯 Base를 `doro-alpha` Namespace에 배치하고
+Prod Alpha Overlay는 여섯 Base를 `doro-alpha` Namespace에 배치하고
 [`secrets-manager`](components/secrets-manager/README.md) Component를 결합한다.
 
 ## 현재 적용 가능 범위
 
 Manifest 구조, Runtime 설정, Secrets Manager 연결과 PostgreSQL Migration Job은 구현되어 있지만,
-EKS에 적용할 Image Tag는 아직 완성되지 않았다. Dev Alpha NetworkPolicy는 포함되어 있지만
+EKS에 적용할 Image Tag는 아직 완성되지 않았다. Prod Alpha NetworkPolicy는 포함되어 있지만
 실제 CNI Enforcement와 Packet Test 전에는 격리 완료로 판정하지 않는다.
 
 - Image Digest는 의도적으로 `sha256:unconfigured`다. ECR에 Push된 전체 Git SHA Tag와 일치하는 Digest로 교체해야 한다.
-- Dev Alpha Overlay에는 RDS PostgreSQL URL, Redis Endpoint와 SQS Queue 값이 구성되어 있다. MongoDB URI는 Audit Secret에서 주입한다.
+- Prod Alpha Overlay에는 RDS PostgreSQL URL, Redis Endpoint와 SQS Queue 값이 구성되어 있다. MongoDB URI는 Audit Secret에서 주입한다.
 - 목표 경계는 CloudFront와 Internal ALB에서 각각 TLS를 종료하고, ALB 뒤 ClusterIP 구간은 HMAC과 Kubernetes Service DNS로 제한한 HTTP를 사용하는 구조다. 각 Runtime의 `*_ALLOW_CLUSTER_SERVICE_HTTP=true` opt-in 없이는 기동 시 Fail-Closed한다.
 - CloudFront VPC Origin은 전용 `origin.doro.minseok.click` 이름과 Regional ACM 인증서를 사용해 Gateway API가 생성한 내부 ALB의 HTTPS 443 Listener에 연결한다. ALB에서 TLS를 종료한 뒤 Edge ClusterIP Target에는 HTTP로 전달한다.
 - Argo CD Application은 아직 포함하지 않는다.
@@ -74,9 +74,9 @@ AWS Load Balancer Controller는 AWS 공식 Helm Chart `3.5.0`으로 설치하며
 `v3.5.0` IAM Policy와 Pod Identity는 Terraform이 관리한다. 설치와 검증 순서는
 [`platform/aws-load-balancer-controller`](platform/aws-load-balancer-controller/README.md)를 따른다.
 
-Base의 Edge `HTTPRoute`는 재사용용 논리 Parent `doro-cell-gateway`를 참조하고 Dev Alpha
+Base의 Edge `HTTPRoute`는 재사용용 논리 Parent `doro-cell-gateway`를 참조하고 Prod Alpha
 Overlay가 이를 `doro-alpha-gateway`로 교체한다. `LoadBalancerConfiguration`이
-`doro-erp-dev-alpha-gateway` 내부 ALB, 두 Private Application Subnet, CloudFront 전용
+`doro-erp-prod-alpha-gateway` 내부 ALB, 두 Private Application Subnet, CloudFront 전용
 Security Group과 공통 AWS Tag를 중앙에서 강제한다. Edge `TargetGroupConfiguration`은
 Pod IP Target과 Readiness Health Check를 소유한다. Gateway HTTPS Listener의 hostname은
 AWS Load Balancer Controller가 Regional ACM 인증서를 자동 탐색하기 위한 값이다.
@@ -97,21 +97,21 @@ Login·본인 비밀번호 Route는 Runtime과 테스트가 존재하지만 정�
 
 ## 렌더링 검증
 
-Cluster 접속 없이 다음 명령으로 Base와 Dev Alpha Overlay가 정상 조합되는지 확인한다.
+Cluster 접속 없이 다음 명령으로 Base와 Prod Alpha Overlay가 정상 조합되는지 확인한다.
 
 ```bash
 kubectl kustomize deploy/base
-kubectl kustomize deploy/overlays/dev/alpha
+kubectl kustomize deploy/overlays/prod/alpha
 ```
 
-Dev Alpha 결과에는 다음이 포함되어야 한다.
+Prod Alpha 결과에는 다음이 포함되어야 한다.
 
 - Namespace 1개
 - ServiceAccount, ConfigMap, Service, Deployment 각각 6개
 - HorizontalPodAutoscaler와 PodDisruptionBudget 각각 6개
 - 공개 HTTPRoute 1개(Edge)
 - TargetGroupConfiguration 1개(Edge)
-- Dev Alpha Overlay의 LoadBalancerConfiguration과 Gateway 각각 1개
+- Prod Alpha Overlay의 LoadBalancerConfiguration과 Gateway 각각 1개
 - SecretProviderClass 6개
 - 각 Deployment의 ConfigMap `envFrom`과 서비스별 Runtime Secret `envFrom`
 - 각 Deployment의 Secrets Store CSI Volume
@@ -133,7 +133,7 @@ CPU Request 대비 평균 사용률 70%를 기준으로 최대 4개까지 확장
 
 재사용 Base의 각 Deployment는 `topology.kubernetes.io/zone`과
 `kubernetes.io/hostname`에 대해 `maxSkew: 1`, `minDomains: 2`, `DoNotSchedule`을 사용한다.
-Dev Alpha Overlay는 비용과 현재 운영 제약을 반영한 단일 AZ Workload이므로 Zone 제약만
+Prod Alpha Overlay는 비용과 현재 운영 제약을 반영한 단일 AZ Workload이므로 Zone 제약만
 제거하고 Hostname `DoNotSchedule`은 유지한다. 따라서 서비스별 두 Replica는 같은
 `ap-northeast-2a` 안에서도 서로 다른 Node에 배치되며, Node가 한 대뿐이면 두 번째 Replica는
 의도적으로 Pending 상태를 유지한다.
@@ -146,27 +146,27 @@ Replica를 요청해 Node 여유 용량을 넘으면 Cluster Autoscaler가 단�
 확인하기 전에는 자동 확장과 가용성이 검증된 것으로 판정하지 않는다. 단일 AZ 구성은 해당 AZ
 장애를 견디지 못하며 운영 Multi-AZ 기준을 대체하지 않는다.
 
-## Dev Alpha NetworkPolicy
+## Prod Alpha NetworkPolicy
 
-Dev Alpha Overlay는 `app.kubernetes.io/component`가 `edge` 또는 `application`인 여섯
+Prod Alpha Overlay는 `app.kubernetes.io/component`가 `edge` 또는 `application`인 여섯
 Runtime Pod에 Ingress와 Egress 기본 거부를 적용한다. 허용 행렬은 다음과 같다.
 
 | 출발지 | 목적지 | TCP Port | 용도 |
 |---|---|---:|---|
-| Dev VPC `10.24.0.0/16` | Edge | 8080 | IP Target ALB 요청과 Health Check |
+| Prod VPC `10.24.0.0/16` | Edge | 8080 | IP Target ALB 요청과 Health Check |
 | Edge | Store Access / Commerce / Payment / Audit | 8081 / 8082 / 8083 / 8085 | 공개 Route의 승인된 내부 Provider 호출 |
 | Store Access | Commerce | 8082 | Store Access가 소유한 Commerce 내부 호출 |
 | Commerce | Store Access / Queue | 8081 / 8084 | Context 조회와 Fulfillment 호출 |
 | Payment | Commerce | 8082 | 주문·금액·결제 가능 상태 확인 |
 | 모든 Application | CoreDNS | TCP·UDP 53 | Service와 외부 Endpoint DNS 조회 |
 | 모든 Application | EKS Pod Identity Agent `169.254.170.23/32` | 80 | Pod Identity Credential 조회 |
-| Store Access | Dev VPC | 5432 / 6379 / 443 | PostgreSQL / Redis / SQS PrivateLink |
-| Commerce, Queue | Dev VPC | 5432 / 443 | PostgreSQL / SQS PrivateLink |
-| Payment | Dev VPC / 외부 | 5432 / 443 | PostgreSQL / SQS PrivateLink와 Toss Test HTTPS |
-| Audit | Dev VPC / 외부 | 443 / 27017 | SQS PrivateLink / MongoDB Atlas SRV Target |
+| Store Access | Prod VPC | 5432 / 6379 / 443 | PostgreSQL / Redis / SQS PrivateLink |
+| Commerce, Queue | Prod VPC | 5432 / 443 | PostgreSQL / SQS PrivateLink |
+| Payment | Prod VPC / 외부 | 5432 / 443 | PostgreSQL / SQS PrivateLink와 Toss Test HTTPS |
+| Audit | Prod VPC / 외부 | 443 / 27017 | SQS PrivateLink / MongoDB Atlas SRV Target |
 
 Kubernetes NetworkPolicy는 FQDN이나 AWS Security Group을 목적지 Selector로 사용할 수
-없다. 따라서 ALB IP Target의 Source와 RDS·ElastiCache·Interface Endpoint는 현재 Dev
+없다. 따라서 ALB IP Target의 Source와 RDS·ElastiCache·Interface Endpoint는 현재 Prod
 VPC CIDR로 제한하며, 세부 Resource 격리는 각 Resource Security Group과 Pod Identity
 IAM이 담당한다. ALB 허용 규칙은 같은 VPC의 다른 Source도 Edge 8080에 도달할 수 있으므로
 ALB Security Group의 Backend 규칙을 함께 유지해야 한다.
@@ -174,7 +174,7 @@ ALB Security Group의 Backend 규칙을 함께 유지해야 한다.
 Toss와 Atlas의 IP는 Provider가 변경할 수 있어 Payment의 외부 TCP 443과 Audit의 외부
 TCP 27017을 VPC·Kubernetes Service CIDR 밖의 전체 IPv4로 허용했다. 이는 Port 단위의
 단계적 제한이며 FQDN-aware Egress Gateway 또는 CNI 정책을 도입하기 전까지 임의의 같은
-Port 목적지도 허용하는 잔여 위험이 있다. Atlas M0를 PrivateLink로 전환할 수 없다는 Dev
+Port 목적지도 허용하는 잔여 위험이 있다. Atlas M0를 PrivateLink로 전환할 수 없다는 Prod
 설계도 이 제한의 배경이다. IPv6 Pod/Endpoint를 활성화할 때는 별도 IPv6 정책을 추가하기 전
 배포하지 않는다.
 
@@ -198,12 +198,12 @@ NetworkPolicy는 Job 실행 시점과 DB Endpoint가 확정된 뒤 그 Kustomiza
 변경하며 Cluster에는 직접 적용하지 않는다.
 
 ```bash
-./deploy/scripts/record-dev-alpha-image.sh \
+./deploy/scripts/record-prod-alpha-image.sh \
   payment \
   0123456789abcdef0123456789abcdef01234567 \
   sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-git diff -- deploy/overlays/dev/alpha/kustomization.yaml
-kubectl kustomize deploy/overlays/dev/alpha >/dev/null
+git diff -- deploy/overlays/prod/alpha/kustomization.yaml
+kubectl kustomize deploy/overlays/prod/alpha >/prod/null
 ```
 
 Overlay의 `images` 항목은 다음 형태를 사용한다.
@@ -223,11 +223,11 @@ EKS Console이나 `kubectl set image`로만 변경해 Git과 Cluster 상태를 �
 
 ## 중앙 Application Log
 
-Dev Alpha ConfigMap은 Spring Boot Console Log를 ECS JSON으로 전환하고 `service.name`,
-`service.environment=dev-alpha`, `cell=alpha`와 MDC의 `requestId`를 구조화한다. Stack Trace는
+Prod Alpha ConfigMap은 Spring Boot Console Log를 ECS JSON으로 전환하고 `service.name`,
+`service.environment=prod-alpha`, `cell=alpha`와 MDC의 `requestId`를 구조화한다. Stack Trace는
 Log 수집 비용과 단일 Event 크기를 제한하기 위해 16 KiB로 자른다. CloudWatch Observability
 Add-on은 Container Log에 Kubernetes Metadata를 결합해
-`/aws/containerinsights/doro-erp-dev/application`으로 전송한다. `/actuator/**`는 계속 Public
+`/aws/containerinsights/doro-erp-prod/application`으로 전송한다. `/actuator/**`는 계속 Public
 HTTPRoute에 노출하지 않는다.
 
 Cookie, Authorization, HMAC, 비밀번호, 전체 요청·응답 Body와 결제정보를 Log에 추가하지 않는다.

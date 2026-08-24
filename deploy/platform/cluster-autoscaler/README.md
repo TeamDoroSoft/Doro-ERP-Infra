@@ -1,6 +1,6 @@
 # Cluster Autoscaler
 
-Dev EKS `1.35`에는 Kubernetes Cluster Autoscaler `1.35.0`과 Helm Chart `9.58.0`을
+Prod EKS `1.35`에는 Kubernetes Cluster Autoscaler `1.35.0`과 Helm Chart `9.58.0`을
 사용한다. Terraform은 단일 AZ Managed Node Group의 경계 `min=2`, `max=4`, 전용 IAM
 Role과 Pod Identity Association을 관리한다. Helm은
 `kube-system/cluster-autoscaler` ServiceAccount와 Runtime을 관리한다.
@@ -14,11 +14,11 @@ Cluster Autoscaler는 `Insufficient cpu` 또는 `Insufficient memory`로 Pending
 먼저 Foundation Terraform을 적용해 Node Group 경계와 IAM을 준비한다.
 
 ```bash
-cd terraform/environments/dev
+cd terraform/environments/prod
 terraform init -backend-config=backend.hcl
-terraform plan -out=dev.tfplan
-terraform apply dev.tfplan
-aws eks update-kubeconfig --region ap-northeast-2 --name doro-erp-dev
+terraform plan -out=prod.tfplan
+terraform apply prod.tfplan
+aws eks update-kubeconfig --region ap-northeast-2 --name doro-erp-prod
 ```
 
 Node Group이 `ap-northeast-2a`에서 최소 두 Node를 제공하는지 확인한다.

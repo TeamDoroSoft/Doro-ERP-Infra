@@ -1,6 +1,5 @@
-clusterName: doro-erp-dev
+clusterName: doro-erp-prod
 region: ap-northeast-2
-vpcId: vpc-0fd66ab523924fc38
 
 replicaCount: 2
 
