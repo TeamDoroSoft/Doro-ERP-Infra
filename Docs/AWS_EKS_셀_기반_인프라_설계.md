@@ -4,9 +4,9 @@
 >
 > 문서 상태: 목표 아키텍처 및 구현 기준선
 >
-> 기준일: 2026-08-10
+> 기준일: 2026-08-21
 >
-> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis·MongoDB Atlas 전용 Stack, 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Edge 단일 Public Ingress가 구현되었다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되었다. ALB HTTPS Listener·Regional ACM 인증서·NetworkPolicy·가용성 Manifest와 CloudWatch 중앙 Log·최소 Alarm은 코드에 반영되었으며 실제 AWS 검증이 남아 있다. Dev 배포는 승인된 ECR Digest를 Git에 기록한 뒤 수동 적용하고, 자동 CD와 Argo CD는 이 절차를 검증한 후 도입한다.
+> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis·MongoDB Atlas 전용 Stack, 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Edge 단일 Public Ingress가 구현되었다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되었다. ALB HTTPS Listener·Regional ACM 인증서·NetworkPolicy·가용성 Manifest와 CloudWatch 중앙 Log·최소 Alarm은 코드에 반영되었으며 실제 AWS 검증이 남아 있다. Dev 배포는 승인된 ECR Digest를 Git에 기록한 뒤 수동 적용하고, 자동 CD와 Argo CD는 이 절차를 검증한 후 도입한다. **목표 Routing 방식은 Kubernetes Ingress에서 AWS Load Balancer Controller의 Gateway API(GatewayClass·Gateway·HTTPRoute·LoadBalancerConfiguration·TargetGroupConfiguration)로 전환됐다. 실제 Cell의 Ingress→Gateway API Cutover는 아직 수행 전이며 §7.5의 절차를 따른다.**
 
 ## 1. 문서의 목적
 
@@ -28,7 +28,7 @@
 - [서비스별 계약 카탈로그](../../Docs/Specifications/서비스별_계약_카탈로그.md)
 - [기술 스택](<../../Docs/의사결정/ERP 기술 스택.md>)
 
-AWS 배포 Topology·Cell 격리·IngressGroup·자원 소유권은 이 문서를 기준으로 한다. [Infra README](../README.md)는 현재 구현 상태와 실행·검증 진입점을 소유한다. 설계가 변경되면 두 문서를 같은 변경에서 맞춘다.
+AWS 배포 Topology·Cell 격리·Gateway API Routing·자원 소유권은 이 문서를 기준으로 한다. [Infra README](../README.md)는 현재 구현 상태와 실행·검증 진입점을 소유한다. 설계가 변경되면 두 문서를 같은 변경에서 맞춘다.
 
 ## 2. 결론부터 보는 설계 요약
 
@@ -38,8 +38,9 @@ AWS 배포 Topology·Cell 격리·IngressGroup·자원 소유권은 이 문서�
 Tenant Domain
 → Route 53
 → Cell별 CloudFront + WAF
-→ Cell별 내부 ALB
-→ `/api/v1`을 소유한 Edge 단일 Ingress
+→ CloudFront VPC Origin
+→ Gateway API(AWS Load Balancer Controller)가 생성한 Cell별 내부 ALB
+→ `/api/v1`을 소유한 Edge 단일 HTTPRoute
 → Edge 내부 HMAC Routing
 → Store Access / Commerce / Payment / Queue / Audit ClusterIP
 → Cell 전용 데이터·SQS·Secret
@@ -53,8 +54,8 @@ Tenant Domain
 | Container Runtime | Amazon EKS 관리형 Node Group |
 | 배포 방식 | GitHub Actions + ECR + Argo CD GitOps |
 | Manifest | 서비스별 Kustomize Base, 환경·Cell Overlay |
-| 외부 진입 | Route 53, ACM, CloudFront, WAF, Cell별 ALB |
-| API Routing | Cell별 Edge 단일 Ingress가 `/api/v1`을 소유하고 Module은 ClusterIP만 소유 |
+| 외부 진입 | Route 53, ACM, CloudFront, WAF, Cell별 ALB(Gateway API) |
+| API Routing | AWS Load Balancer Controller Gateway API(GatewayClass·Gateway·HTTPRoute·LoadBalancerConfiguration·TargetGroupConfiguration)가 Cell별 Internal ALB를 생성하고, Edge 단일 HTTPRoute가 `/api/v1`을 소유하며 Module은 ClusterIP·TargetGroupConfiguration만 소유 |
 | Frontend | Vue SPA를 S3에 배포하고 CloudFront OAC로만 접근 |
 | 관계형 데이터 | Amazon RDS for PostgreSQL, 서비스별 Database와 Role |
 | Session | Dev Alpha는 ElastiCache for Redis OSS 7.1 단일 Node, TLS·RBAC |
@@ -64,6 +65,7 @@ Tenant Domain
 | 관측성 | CloudWatch Log·Metric·Alarm + Application Actuator·Micrometer |
 | Tenant 기본 모델 | Cell 내부는 공유 Pool과 `tenant_id` 논리 격리 |
 | 전용 Tenant | 별도 Cell에 Application·데이터·Queue·Secret을 분리 |
+| Resource Tag | 모든 AWS Resource(Gateway API가 생성하는 ALB·Target Group 포함)에 `Team=team2` Tag 유지 |
 
 이 구조에서 **Namespace는 Tenant 경계가 아니라 Cell 경계**다. Alpha Cell의 Tenant A와 B를 각각 Namespace로 나누지 않는다. 두 Tenant는 동일한 Application과 Database를 공유하고 Application의 검증된 `tenant_id`로 구분한다.
 
@@ -90,7 +92,7 @@ Alpha Cell
 Tenant A와 B는 다음 자원을 공유한다.
 
 - 같은 여섯 Application Deployment와 Service
-- 같은 Cell ALB와 IngressGroup
+- 같은 Cell ALB(Gateway API의 GatewayClass·Gateway가 생성)
 - 같은 PostgreSQL Instance 또는 Cluster
 - 같은 Cell의 서비스별 Database
 - 같은 Redis와 MongoDB 운영 단위
@@ -113,7 +115,7 @@ Bravo Cell은 Tenant C처럼 강화된 격리나 독립 용량이 필요한 고�
 ```text
 Bravo Cell
 ├─ Tenant C: c.doro.com
-├─ 전용 ALB·IngressGroup
+├─ 전용 ALB(Gateway API 리소스)
 ├─ 전용 여섯 Application Deployment
 ├─ 전용 PostgreSQL 4 DB
 ├─ 전용 Redis·MongoDB
@@ -123,7 +125,7 @@ Bravo Cell
 
 Bravo Cell이 Alpha Cell과 공유할 수 있는 것은 EKS Control Plane, ECR Image, GitOps Repository와 Argo CD 같은 **플랫폼 Control Plane**이다. 다음 **Runtime·데이터 자원은 공유하지 않는다.**
 
-- Kubernetes Namespace와 Service·Ingress
+- Kubernetes Namespace와 Service·Gateway·HTTPRoute
 - ALB와 Target Group
 - Service Account와 Pod Identity IAM Role
 - PostgreSQL Database·Credential
@@ -178,8 +180,8 @@ flowchart TB
 
         subgraph VPC[VPC · 2개 AZ]
             subgraph APP[Private Application Subnets]
-                ALB_A[Internal ALB · Alpha]
-                ALB_B[Internal ALB · Bravo]
+                ALB_A[Internal ALB · Alpha<br/>Gateway API 생성]
+                ALB_B[Internal ALB · Bravo<br/>Gateway API 생성]
 
                 subgraph EKS[Amazon EKS]
                     CELL_A[Namespace doro-alpha<br/>6개 Spring Boot App]
@@ -215,8 +217,8 @@ flowchart TB
     CF_B -->|정적 Content · OAC| S3_B
     CF_A -->|/api/* · VPC Origin| ALB_A
     CF_B -->|/api/* · VPC Origin| ALB_B
-    ALB_A --> CELL_A
-    ALB_B --> CELL_B
+    ALB_A -->|Edge HTTPRoute만| CELL_A
+    ALB_B -->|Edge HTTPRoute만| CELL_B
     CELL_A --> PG_A
     CELL_A --> REDIS_A
     CELL_A --> MONGO_A
@@ -237,7 +239,7 @@ flowchart TB
     CELL_B --> CW
 ```
 
-이 다이어그램은 목표 상태를 표현한다. 현재 저장소에 이 구성을 생성하는 Terraform과 Manifest가 있다는 의미는 아니다.
+이 다이어그램은 목표 상태를 표현한다. 현재 저장소에 이 구성을 생성하는 Terraform과 Manifest가 있다는 의미는 아니다. Internal ALB는 Kubernetes Ingress Resource가 아니라 AWS Load Balancer Controller의 Gateway API 기능(GatewayClass·Gateway·LoadBalancerConfiguration)이 생성하며, 각 Cell에서 이 ALB로 연결되는 Kubernetes Route는 Edge HTTPRoute 하나뿐이다.
 
 ## 5. 외부 Traffic과 Tenant Domain Routing
 
@@ -249,12 +251,12 @@ Tenant 사용자의 요청은 다음 순서로 처리한다.
 2. Route 53 Record는 해당 Tenant가 배치된 Cell의 CloudFront Distribution을 가리킨다.
 3. CloudFront는 WAF와 ACM 인증서를 통해 HTTPS 요청을 받는다.
 4. 정적 경로 `/*`는 OAC를 사용해 Cell의 S3 Vue SPA Origin으로 전달한다.
-5. `/api/*`는 CloudFront VPC Origin을 통해 Cell 전용 내부 ALB로 전달한다.
-6. ALB는 IngressGroup이 구성한 Path 규칙으로 Edge·Store Access·Commerce·Queue 중 하나를 선택한다.
-7. Payment·Audit 공개 요청은 Edge가 Session을 검증하고 내부 HMAC을 추가해 ClusterIP Provider로 전달한다.
+5. `/api/*`는 CloudFront VPC Origin을 통해 Gateway API가 생성한 Cell 전용 내부 ALB로 전달한다.
+6. ALB는 Edge HTTPRoute의 `/api/v1` Path 규칙에 따라 Edge Service로만 전달한다 — Store Access·Commerce·Payment·Queue·Audit는 별도 HTTPRoute를 갖지 않으며 외부에서 직접 도달할 수 없다.
+7. Edge는 Store Access Session 또는 Kiosk Credential을 검증하고 방향별 내부 HMAC을 추가해 Store Access·Commerce·Payment·Queue·Audit ClusterIP Provider로 전달한다.
 8. Backend는 인증 Context에서 Tenant·Store·Actor를 다시 검증한다.
 
-CloudFront·ALB·Ingress의 Host Routing은 Application 인증을 대체하지 않는다. 잘못된 Host나 직접적인 내부 호출이 발생해도 다른 Tenant 데이터가 조회되지 않도록 Repository까지 Tenant Scope를 적용한다.
+CloudFront·ALB·Gateway API Routing은 Application 인증을 대체하지 않는다. 잘못된 Host나 직접적인 내부 호출이 발생해도 다른 Tenant 데이터가 조회되지 않도록 Repository까지 Tenant Scope를 적용한다.
 
 ### 5.2 Frontend 분리 수준
 
@@ -301,7 +303,7 @@ NetworkPolicy 적용 여부는 실제 EKS CNI의 Policy Enforcement 설정과 �
 |---|---|
 | 팀 개발자 | 담당 서비스 Namespace Resource 조회·배포 변경, Secret 원문 조회 금지 |
 | Argo CD | 승인된 GitOps 경로의 Manifest 동기화 |
-| AWS Load Balancer Controller | 승인된 Ingress·TargetGroupBinding 관리 |
+| AWS Load Balancer Controller | 승인된 Gateway·HTTPRoute·LoadBalancerConfiguration·TargetGroupConfiguration·TargetGroupBinding 관리 |
 | 서비스 Pod | EKS Pod Identity로 자신의 AWS Resource만 접근 |
 | Migration Job | 자기 Database의 Flyway Migration Credential만 사용 |
 | 운영 관리자 | 승인된 장애 대응과 Rollback, 최소 인원 |
@@ -321,81 +323,202 @@ Cell과 서비스마다 다음 Resource를 설정한다.
 
 재사용 Base는 운영 후보 기준을 검증할 수 있도록 서비스별 최소 2 Replica를 두 AZ와 서로 다른 Node에 분산한다. Dev Alpha는 비용과 현재 운영 제약 때문에 단일 AZ를 사용하되, Hostname 분산으로 두 Replica를 서로 다른 Node에 배치한다. HPA는 CPU Resource Metric으로 Pod를 2개에서 최대 4개까지 조정하고 Cluster Autoscaler는 Managed Node를 2대에서 최대 4대까지 조정한다. PDB는 자발적 중단을 한 번에 한 Replica로 제한한다. Audit·Outbox Scheduler처럼 중복 실행 가능한 Worker는 Application의 Lease·멱등성 계약을 먼저 충족해야 한다. Metrics Server, 실제 Node 용량, HPA Condition, Node 증감과 Node Drain을 검증하기 전에는 자동 확장이 완료된 것으로 보지 않으며, 단일 AZ Dev 구성을 고가용성으로 판정하지 않는다.
 
-## 7. 서비스별 Manifest와 IngressGroup
+## 7. 서비스별 Manifest와 Gateway API Routing
 
-### 7.1 IngressGroup을 선택하는 이유
+### 7.1 Gateway API를 선택하는 이유
 
-한 명이 중앙 Ingress Manifest를 소유하면 팀원이 API Prefix를 변경할 때마다 중앙 파일 충돌과 조율이 발생한다. 이 프로젝트에서는 각 Module 담당자가 자신의 Deployment·Service·Ingress를 관리하고, 같은 Cell의 Ingress를 AWS Load Balancer Controller의 IngressGroup으로 하나의 ALB에 결합한다.
+Kubernetes Ingress는 AWS Load Balancer Controller의 `IngressGroup` Annotation으로 여러 Ingress Manifest를 하나의 ALB로 묶을 수 있었지만, `IngressClass`·`IngressClassParams`와 Provider별 확장 Annotation에 설정이 흩어지는 한계가 있었다. 이 프로젝트는 Kubernetes 표준 후속 API인 **Gateway API**와 AWS Load Balancer Controller의 Gateway API 지원으로 전환한다.
+
+- ALB 자체의 설정(Scheme, Subnet, Security Group, WAF 연결, Tag)은 `LoadBalancerConfiguration` 하나에 구조화된 필드로 모인다.
+- Target Group 설정(Target Type, Health Check)은 `TargetGroupConfiguration`으로 표현한다. 이 Cell에서는 `HTTPRoute` `backendRef`가 `edge-api` 하나뿐이므로 `TargetGroupConfiguration`도 `edge-api` 하나만 존재한다(§7.2).
+- 외부에 노출하는 경로 규칙은 `HTTPRoute`로 표현하며, Ingress처럼 Provider별 Annotation 문자열에 의존하지 않는다.
+- 기존 Ingress/IngressGroup 모델과 달리, **이 Cell 구성에서는 Edge만 HTTPRoute를 가진다** — Store Access·Commerce·Payment·Queue·Audit는 어떤 형태로도 외부에 직접 노출되지 않는다(§7.3). 이는 Gateway API 전환과 별개로 실제 서비스 설계(Edge가 유일한 외부 진입점이고 `/internal/v1/**`은 Edge만 호출한다는 원칙)와 이 문서를 일치시키는 정정이기도 하다.
+
+### 7.2 Gateway API 리소스 구조와 소유권
 
 ```text
-Cell Alpha IngressGroup: doro-alpha
-├─ Edge Ingress (Payment·Audit 공개 경계)
-├─ Store Access Ingress
-├─ Commerce Ingress
-├─ Queue Ingress
-└─ Payment·Audit ClusterIP Provider
+Cell Alpha
+├─ GatewayClass: doro-alb (Cluster 전체에 1개, controllerName=gateway.k8s.aws/alb)
+├─ LoadBalancerConfiguration: doro-alpha-alb-config (Cell별 1개, ALB 이름·Scheme·Subnet·SG·Tag)
+├─ Gateway: doro-alpha-gateway (Cell별 1개, GatewayClass + LoadBalancerConfiguration 참조)
+├─ HTTPRoute: edge-api-route (Edge 전용 1개, `/api/v1` → edge-api Service — backendRef는 이 하나뿐)
+└─ TargetGroupConfiguration: edge-api-tgconfig (Edge 전용 1개만 존재)
          ↓
-      ALB Alpha 1개
+      ALB Alpha 1개(Gateway API가 생성, doro-erp-dev-alpha-gateway)
 ```
 
-개발 파일 수는 늘지만 다음 이점이 있다.
+`HTTPRoute`의 `backendRef`가 `edge-api` 하나뿐이므로 ALB Target Group도 `edge-api` 하나만 생성된다. Store Access·Commerce·Payment·Queue·Audit는 Cluster 내부에서 ClusterIP로만 호출되고 ALB Target Group에 등록되지 않으므로, 이 다섯 서비스는 `TargetGroupConfiguration`을 만들지 않는다.
 
-- 팀원이 담당 Module 범위에서 Route와 Health Check를 함께 변경할 수 있다.
-- 한 서비스 변경이 중앙 Manifest 전체의 Merge Conflict로 이어지지 않는다.
-- 여섯 Application을 독립 배포·Rollback하기 쉽다.
-- Cell Overlay가 같은 Base를 재사용할 수 있다.
-- 서비스별 Smoke Test와 Route 소유권이 명확해진다.
+| 리소스 | 소유 | 비고 |
+|---|---|---|
+| Deployment·Service | 서비스 팀 | 변경 없음(다섯 내부 서비스도 Service는 갖되 ALB Target Group에는 연결되지 않는다) |
+| `TargetGroupConfiguration`(Health Check Path·Port, Target Type) | Edge 팀 | **`edge-api` 하나만 존재.** `HTTPRoute` `backendRef`가 `edge-api`뿐이므로 다른 다섯 서비스는 이 Resource를 만들지 않는다 |
+| `HTTPRoute`(`/api/v1`) | Edge 팀 | Cell당 유일. 다른 서비스는 `HTTPRoute`를 만들지 않는다 |
+| `GatewayClass` | Infra 공통 | Cluster에 1개, 변경 금지 |
+| `Gateway` | Infra 공통 | Cell당 1개, 변경 금지(팀 제안은 가능하나 적용은 Infra) |
+| `LoadBalancerConfiguration`(이름·Scheme·Subnet·SG·Tag) | Infra 공통 | 변경 금지. `Team=team2` Tag와 §7.6의 고정 ALB 이름을 여기서 소유 |
+| NetworkPolicy | 서비스 허용 흐름 제안, Infra 소유 | 변경 없음 |
+| Service Account | 서비스 팀(이름·사용 Resource), Infra(Pod Identity 연결) | 변경 없음 |
 
-### 7.2 소유권 규칙
+예시 Manifest는 **AWS Load Balancer Controller 3.5.0** 기준이다. `gateway.k8s.aws` Group의 `LoadBalancerConfiguration`·`TargetGroupConfiguration`은 이 Version에서 `v1`으로 GA됐다(이전 `v1beta1`에서 승격). 표준 Gateway API Resource(`GatewayClass`·`Gateway`·`HTTPRoute`)는 `gateway.networking.k8s.io/v1`로 별개다. 정확한 필드 구조는 설치하는 Controller Version의 공식 CRD 문서로 최종 확인한다.
 
-| 항목 | 서비스 팀 소유 | Infra 공통 소유 |
-|---|---:|---:|
-| Deployment·Service | O | 공통 Label·보안 기준 검증 |
-| Ingress Path | O | Prefix 충돌 검사 |
-| Health Check Path·Port | O | ALB 공통 정책 검증 |
-| IngressGroup 이름 | 변경 금지 | O |
-| ALB Scheme·Subnet·Security Group | 변경 금지 | O |
-| WAF·TLS·CloudFront Origin | 변경 금지 | O |
-| NetworkPolicy | 서비스 허용 흐름 제안 | Cell 기본 차단 정책 소유 |
-| Service Account | 이름·사용 Resource 명시 | Pod Identity IAM 연결 |
+```yaml
+# GatewayClass — Cluster에 1개, Infra 공통 소유, 표준 Gateway API Resource
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: doro-alb
+spec:
+  controllerName: gateway.k8s.aws/alb
+---
+# LoadBalancerConfiguration — Cell별 1개, AWS 전용 CRD(LBC 3.5.0: v1)
+apiVersion: gateway.k8s.aws/v1
+kind: LoadBalancerConfiguration
+metadata:
+  name: doro-alpha-alb-config
+  namespace: doro-alpha
+spec:
+  loadBalancerName: doro-erp-dev-alpha-gateway   # §7.6 — 기존 Ingress ALB와 이름 충돌 방지를 위해 고정
+  scheme: internal
+  loadBalancerSubnets:
+    - identifier: subnet-alpha-app-a
+    - identifier: subnet-alpha-app-b
+  securityGroups:
+    - identifier: sg-doro-alpha-alb
+  manageBackendSecurityGroupRules: true
+  listenerConfigurations:
+    - protocolPort: HTTPS:443
+      sslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+  tags:
+    Team: team2
+    Cell: alpha
+    Environment: dev
+---
+# Gateway — Cell별 1개, 표준 Gateway API Resource
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: doro-alpha-gateway
+  namespace: doro-alpha
+spec:
+  gatewayClassName: doro-alb
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: origin.doro.minseok.click   # §7.6 — ACM 인증서 자동 탐색 기준
+      allowedRoutes:
+        namespaces:
+          from: Same
+  infrastructure:
+    parametersRef:
+      group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+      name: doro-alpha-alb-config
+---
+# TargetGroupConfiguration — Edge 전용 1개만 존재(HTTPRoute backendRef가 edge-api 하나뿐이므로)
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: edge-api-tgconfig
+  namespace: doro-alpha
+spec:
+  targetReference:
+    name: edge-api
+  defaultConfiguration:
+    targetType: ip
+    healthCheckConfig:
+      healthCheckPath: /actuator/health
+      healthCheckPort: "8080"
+    tags:
+      Team: team2
+---
+# HTTPRoute — Edge 전용 1개, backendRef는 edge-api 하나뿐
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: edge-api-route
+  namespace: doro-alpha
+spec:
+  parentRefs:
+    - name: doro-alpha-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/v1
+      backendRefs:
+        - name: edge-api
+          port: 8080
+```
 
-서비스 담당자가 임의의 `group.name`이나 ALB Annotation을 추가해 다른 Cell ALB에 참여할 수 없도록 RBAC, Code Review와 가능하면 Admission Policy로 제한한다. IngressGroup은 편리하지만 권한이 넓으면 다른 팀의 ALB Route를 덮어쓸 수 있으므로 신뢰 경계로 관리해야 한다.
+**Listener `hostname`과 ACM 인증서 자동 탐색**: `Gateway`의 HTTPS Listener에 `hostname: origin.doro.minseok.click`을 지정하면, `certificateArn`을 명시하지 않아도 AWS Load Balancer Controller가 계정의 ACM에 이미 등록된 Regional 인증서 중 이 `hostname`과 일치(정확히 일치하거나 Wildcard로 포함)하는 인증서를 자동으로 탐색해 ALB HTTPS Listener에 연결한다. `origin.doro.minseok.click`은 Tenant가 접속하는 Public Domain(`a.doro.com` 등)이 아니라 **CloudFront VPC Origin이 내부 ALB에 HTTPS로 접속할 때 사용하는 Origin 전용 Hostname**이며, 이 이름으로 발급된 기존 Regional ACM 인증서를 재사용하는 것을 전제로 한다. Bravo 등 다른 Cell을 추가할 때 같은 Hostname을 공유할지, Cell별로 별도 Hostname·인증서를 쓸지는 `OPEN` 항목으로 남긴다(§16.2).
 
 ### 7.3 공개 Route와 내부 Route
 
-외부 Ingress에는 브라우저가 호출하는 공개 API만 등록한다. 다음 동기 호출은 공개 ALB를 거치지 않고 ClusterIP Service와 내부 인증 계약을 사용한다.
+**Edge HTTPRoute만 `/api/v1` 경로를 `edge-api` Service로 전달한다.** Store Access·Commerce·Payment·Queue·Audit는 `HTTPRoute`를 갖지 않으며 ClusterIP Service로만 존재한다 — Cell ALB에서 직접 도달할 수 있는 경로가 없다.
+
+다음 동기 호출은 애초에 ALB를 거치지 않고 ClusterIP Service와 내부 인증 계약을 사용한다.
 
 - Commerce → Store Access: Store·Table·Timezone Context
 - Payment → Commerce: Order·서버 금액·결제 가능 상태
 - Commerce → Queue: Fulfillment 상태
 
-`/internal/v1/**`, Actuator 상세 Endpoint, Database·Redis·MongoDB·SQS는 외부 Ingress에 노출하지 않는다.
+`/internal/v1/**`, Actuator 상세 Endpoint, Database·Redis·MongoDB·SQS는 어떤 `HTTPRoute`로도 외부에 노출하지 않는다.
 
-공개 Path의 예시는 다음과 같으며 정확한 Method와 상세 Path는 각 서비스 OpenAPI가 정본이다.
+Edge가 외부에 공개하는 대표 Prefix는 다음과 같으며 정확한 Method와 상세 Path는 Edge와 각 Provider의 OpenAPI가 정본이다.
 
-| 서비스 | 대표 Prefix |
+| Provider(Edge 내부 HMAC 전달 대상) | 대표 Prefix |
 |---|---|
 | Store Access | `/api/v1/auth`, `/api/v1/kiosk-auth`, `/api/v1/kiosk-devices`, `/api/v1/security-history`, `/api/v1/store`, `/api/v1/employees`, `/api/v1/tables` |
 | Commerce | `/api/v1/catalog`, `/api/v1/orders`, `/api/v1/sales` |
-| Edge → Payment | `/api/v1/payments` |
+| Payment | `/api/v1/payments` |
 | Queue | `/api/v1/queues` |
-| Edge → Audit | `/api/v1/audits` |
+| Audit | `/api/v1/audits` |
 
-Payment와 Audit의 공개 Prefix는 Edge Ingress가 소유한다. Edge는 Store Access Session을
-검증하고 방향별 HMAC을 추가한 뒤 ClusterIP Provider를 호출하므로 두 Provider에 동일한
-Public Ingress를 추가하지 않는다.
+이 Prefix들은 모두 Edge HTTPRoute의 `/api/v1` 하나로 들어온 뒤 Edge가 Session을 검증하고 방향별 HMAC을 추가해 각 ClusterIP Provider로 전달하는 대상이다. 어떤 Provider도 자신의 Prefix를 위한 별도 `HTTPRoute`를 소유하지 않는다.
 
 ### 7.4 Route 충돌 방지
 
-IngressGroup은 여러 Manifest를 한 ALB 규칙으로 합치므로 다음을 CI에서 검사한다.
+Gateway API는 `parentRefs`로 여러 `HTTPRoute`를 하나의 `Gateway`에 붙일 수 있으므로 다음을 CI에서 검사한다.
 
-- 동일 Host·Path·우선순위 중복
-- 다른 Cell의 `group.name` 참조
-- 서비스가 소유하지 않은 Prefix 등록
+- Edge 이외 서비스가 `HTTPRoute`를 생성
+- 동일 `parentRefs`·Path 중복 매칭
+- 다른 Cell의 `Gateway`를 `parentRefs`로 참조
 - `/internal/**`, `/actuator/**` 공개
-- Internet-facing ALB Annotation 추가
-- 승인되지 않은 Backend Service·Port 연결
-- TLS·WAF·Security Group 관련 공통 Annotation 변경
+- `LoadBalancerConfiguration`의 `scheme`을 `internet-facing`으로 변경
+- 승인되지 않은 `backendRef` Service·Port 연결
+- `ReferenceGrant` 없이 다른 Namespace의 Service를 `backendRef`로 연결(Gateway API가 기본적으로 막는 Cross-Namespace 참조를 우회하는 시도)
+- TLS·WAF·Security Group·Tag 관련 `LoadBalancerConfiguration` 변경
+- Kubernetes `Ingress`·`IngressClass`·`IngressClassParams` Resource의 재등장(목표 구성에서 완전히 제거됨, §7.5)
+
+### 7.5 Ingress에서 Gateway API로의 전환 절차
+
+기존 Edge Ingress·IngressGroup은 이미 운영 중인 Cell의 유일한 외부 진입점이므로, Gateway API로 무중단에 가깝게 전환하기 위해 다음 순서를 따른다. 각 단계는 이전 단계가 검증된 뒤에만 진행하며, 실패 시 CloudFront Origin만 되돌리면 되도록 기존 Ingress·ALB는 마지막 단계 전까지 그대로 둔다.
+
+1. **Gateway ALB 생성**: 기존 Ingress·IngressGroup은 그대로 둔 채 Cell Namespace에 `GatewayClass`(Cluster에 아직 없다면 1회), `LoadBalancerConfiguration`, `Gateway`, Edge `HTTPRoute`, 서비스별 `TargetGroupConfiguration`을 추가로 배포한다. AWS Load Balancer Controller가 기존 Ingress ALB와는 **완전히 별개인 새 Internal ALB**를 생성한다 — 이 시점에는 CloudFront가 아직 새 ALB를 모른다.
+2. **검증**: `edge-api` Target Group(이 Cell에 존재하는 유일한 ALB Target Group) 하나의 Target Health가 `Healthy`인지, `HTTPRoute`의 `/api/v1` 매칭이 Edge까지 정상 응답하는지 확인한다. 이 확인에는 임시 Host Header 지정 호출이나 임시 Route 53 Record 같은 **테스트용 임시 매니페스트**를 사용할 수 있다.
+3. **VPC Origin 전환**: 검증이 끝나면 CloudFront Distribution의 `/api/*` VPC Origin이 가리키는 대상을 기존 Ingress ALB에서 새 Gateway ALB로 변경한다. Terraform은 `data "aws_lb" "gateway" { name = "doro-erp-dev-alpha-gateway" }`(§7.6)로 Kubernetes/AWS Load Balancer Controller가 생성한 새 ALB를 조회해 ARN·DNS Name을 얻고, CloudFront VPC Origin Resource가 이 값을 참조하도록 갱신한다. CloudFront 전파 지연을 고려해 Traffic이 낮은 시간대에 수행한다.
+4. **CloudFront 검증**: 실제 Tenant Domain으로 `/api/v1` 요청이 새 ALB→Gateway→Edge까지 정상 처리되는지, WAF·TLS·Access Log가 정상 기록되는지 확인한다. 일정 관측 기간 동안 오류율·지연을 관찰한다. 문제가 발견되면 VPC Origin을 기존 ALB로 즉시 되돌린다(기존 Ingress·ALB가 아직 살아있으므로 Rollback 비용이 낮다).
+5. **기존 Ingress 및 ALB 제거**: 새 경로가 충분히 안정적임을 확인한 뒤에만 기존 Ingress·IngressGroup Manifest를 삭제한다. AWS Load Balancer Controller가 소유 Ingress 소멸에 맞춰 기존 ALB·Target Group을 정리한다.
+6. **임시 매니페스트 삭제**: 2단계에서 만든 검증용 임시 Host Header·임시 DNS·임시 Route 매니페스트를 저장소에서 삭제하고, 전환 완료 상태를 이 문서와 Infra README에 반영한다.
+
+### 7.6 ALB 이름과 Terraform 연동
+
+전환 기간 동안 기존 Ingress가 만든 ALB와 Gateway API가 만든 ALB가 **동시에 존재**하므로(§7.5), 이름이 자동 생성 규칙으로 겹치거나 서로 다른 Terraform Data Source가 잘못된 ALB를 가리키는 사고를 막기 위해 새 ALB 이름을 고정한다.
+
+- `LoadBalancerConfiguration.spec.loadBalancerName`을 `doro-erp-dev-alpha-gateway`로 명시한다(§7.2 예시). 이 이름은 기존 Ingress ALB의 자동 생성 이름(`k8s-`로 시작하는 IngressGroup 기반 이름)과 겹치지 않는다.
+- CloudFront VPC Origin을 관리하는 Terraform 구성은 이 ALB를 직접 생성하지 않고 Kubernetes/AWS Load Balancer Controller가 생성한 ALB를 조회한다:
+
+```hcl
+data "aws_lb" "gateway" {
+  name = "doro-erp-dev-alpha-gateway"
+}
+```
+
+- CloudFront VPC Origin Resource는 `data.aws_lb.gateway.arn`(또는 `dns_name`)을 참조하도록 갱신한다(§7.5 3단계).
+- Bravo Cell로 확장할 때는 같은 규칙으로 `doro-erp-dev-bravo-gateway`처럼 Cell별로 다른 고정 이름을 사용한다.
+- 전환 완료 후 기존 Ingress ALB가 삭제되면 이 이름 충돌 우려는 사라지지만, `loadBalancerName` 고정 자체는 향후 재현 가능한 Terraform 조회를 위해 계속 유지한다.
 
 ## 8. 서비스별 데이터와 연결 권한
 
@@ -539,7 +662,7 @@ NAT Gateway는 외부 Provider 통신에 사용한다. 여섯 서비스 중 Toss
 | 도구 | 책임 |
 |---|---|
 | Terraform | VPC, EKS, RDS, SQS, IAM, ECR, Edge 등 AWS Resource 생성 |
-| Kustomize | Kubernetes Deployment·Service·Ingress·Config의 환경·Cell 차이 관리 |
+| Kustomize | Kubernetes Deployment·Service·Gateway API Resource(`Gateway`·`HTTPRoute`·`LoadBalancerConfiguration`·`TargetGroupConfiguration`)·Config의 환경·Cell 차이 관리 |
 | GitHub Actions | Build·Test·Image Push와 ECR Digest 검증 |
 | ECR | 여섯 Application의 불변 Container Image 저장 |
 | Argo CD | GitOps Repository의 목표 상태를 EKS에 동기화 |
@@ -609,7 +732,7 @@ CloudWatch Metric의 Cell Dimension에는 환경과 `cellId`를 포함한다. Ap
 - Application Log는 구조화 JSON으로 수집한다.
 - `traceId`, 서비스명, Cell, 안전한 Aggregate ID와 결과 Code를 사용한다.
 - Password, Cookie, Authorization, Kiosk Secret, Toss Secret, 전체 `paymentKey`, 원문 `Idempotency-Key`와 전체 요청·응답 Body를 남기지 않는다.
-- Actuator 상세·Prometheus Endpoint를 공개 Ingress에 노출하지 않는다.
+- Actuator 상세·Prometheus Endpoint를 공개 `HTTPRoute`에 노출하지 않는다.
 - Health Probe와 운영 Metric 접근은 전용 Management Port, NetworkPolicy 또는 인증된 수집 경로로 제한한다.
 
 Dev Alpha는 CloudWatch Observability EKS Add-on의 Container Log 수집과 Enhanced Container
@@ -657,18 +780,22 @@ Doro-ERP-Infra/
 ├─ deploy/
 │  ├─ base/
 │  │  ├─ edge-api/
-│  │  ├─ store-access-api/
+│  │  │  ├─ deployment.yaml, service.yaml
+│  │  │  ├─ httproute.yaml              # Edge 전용, Cell에서 유일한 HTTPRoute
+│  │  │  └─ targetgroupconfiguration.yaml  # Cell에서 유일한 TargetGroupConfiguration(HTTPRoute backendRef가 edge-api 하나뿐)
+│  │  ├─ store-access-api/              # deployment.yaml, service.yaml만(ALB Target Group 없음, ClusterIP 전용)
 │  │  ├─ commerce-api/
 │  │  ├─ payment-api/
 │  │  ├─ queue-api/
 │  │  └─ audit-api/
 │  ├─ components/
+│  │  ├─ gateway-api/                   # GatewayClass — Cluster에 1개, Cell Overlay가 공통 참조
 │  │  ├─ secrets-manager/
 │  │  ├─ cell-default-deny/
 │  │  ├─ observability/
 │  │  └─ pod-identity/
 │  └─ overlays/
-│     ├─ dev/alpha/
+│     ├─ dev/alpha/                     # gateway.yaml, loadbalancerconfiguration.yaml(Cell별)
 │     ├─ dev/bravo/
 │     └─ production/
 └─ compose/
@@ -676,7 +803,7 @@ Doro-ERP-Infra/
    └─ bootstrap/
 ```
 
-Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namespace, IngressGroup, Image Tag, Resource Size, Queue URL·Secret 참조 같은 차이만 Overlay에서 관리한다.
+Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namespace, `Gateway`·`LoadBalancerConfiguration` 참조, Image Tag, Resource Size, Queue URL·Secret 참조 같은 차이만 Overlay에서 관리한다. Kubernetes `Ingress`·`IngressClass`·`IngressClassParams` Manifest는 이 구조에 포함하지 않는다 — §7.5 전환이 끝나면 과거에 존재했던 것도 제거한다.
 
 ## 14. 구현 순서
 
@@ -692,27 +819,29 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - VPC, 2개 AZ, Public Egress·Private Application·Private Data Subnet
 - EKS 관리형 Node Group과 Pod Identity
 - ECR 6개 Repository
-- AWS Load Balancer Controller와 Argo CD
+- AWS Load Balancer Controller 설치, Gateway API 표준 CRD(`sigs.k8s.io/gateway-api`: `GatewayClass`·`Gateway`·`HTTPRoute`·`ReferenceGrant` 등)와 AWS Load Balancer Controller Gateway API CRD(`LoadBalancerConfiguration`·`TargetGroupConfiguration`) 설치
+- AWS Load Balancer Controller를 `--feature-gates=ALBGatewayAPI=true`(또는 배포 도구의 동등 설정)로 배포해 ALB Gateway API 기능 활성화. 이 단계에서는 Cluster 공통 `GatewayClass`까지만 배포하고 Cell별 `Gateway`·`HTTPRoute`는 아직 적용하지 않는다(단계 3에서 기존 Ingress와 병행 적용 후 §7.5 절차로 전환).
+- Argo CD 설치
 
 ### 단계 3. Alpha 공유 Pool
 
 - `doro-alpha` Namespace와 기본 차단 NetworkPolicy
-- 서비스별 Deployment·Service·Ingress
-- `doro-alpha` IngressGroup과 내부 ALB
+- 서비스별 Deployment·Service(Edge만 추가로 `TargetGroupConfiguration` 보유)
+- `doro-alpha` `LoadBalancerConfiguration`(`loadBalancerName=doro-erp-dev-alpha-gateway`, §7.6)·`Gateway`와 Edge 전용 `HTTPRoute`, Gateway API 기반 내부 ALB(§7.5 절차로 기존 Ingress ALB와 병행 후 전환)
 - Alpha RDS·Redis·MongoDB·SQS·Secret 연결
 - Tenant A·B의 `tenant_id` 격리 Negative Test
 
 ### 단계 4. Edge와 GitOps
 
 - S3 Vue SPA, CloudFront OAC, WAF, ACM, Route 53
-- `/api/*` VPC Origin과 내부 ALB 연결
+- `/api/*` VPC Origin과 Gateway API Internal ALB 연결(§7.5 Cutover 절차 실행)
 - GitHub Actions Image Build·ECR Push 실제 AWS 실행 검증
 - GitOps Image Tag 갱신과 Argo CD Sync
 
 ### 단계 5. Bravo 전용 Cell
 
 - `doro-bravo` Namespace와 Alpha↔Bravo 통신 차단
-- Bravo 전용 ALB·IngressGroup·데이터·SQS·Secret
+- Bravo 전용 `LoadBalancerConfiguration`·`Gateway`·Edge `HTTPRoute`·데이터·SQS·Secret
 - Tenant C Domain Routing
 - Alpha Queue·Database·Service 접근 실패 검증
 
@@ -730,18 +859,22 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 
 - Terraform Plan과 Apply가 깨끗한 승인 환경에서 반복 가능하다.
 - 여섯 Image가 ECR에 Git SHA Tag로 생성되고 독립 배포된다.
-- Edge Ingress 하나만 Cell ALB에 연결되고 Module Public Ingress가 렌더되지 않는다.
+- Edge `HTTPRoute` 하나만 Cell `Gateway`에 연결되고 다른 Module은 어떤 `HTTPRoute`도 소유하지 않는다.
+- ALB Target Group은 `edge-api` 하나만 존재하며 다른 다섯 서비스는 `TargetGroupConfiguration`을 갖지 않는다.
+- Gateway API ALB의 실제 이름이 `LoadBalancerConfiguration.loadBalancerName`으로 고정한 값(`doro-erp-dev-alpha-gateway` 등)과 일치하고, Terraform `data "aws_lb"`가 이 이름으로 정상 조회된다.
+- §7.5 전환 완료 후 기존 Kubernetes `Ingress`·`IngressClass`·`IngressClassParams`와 구 ALB가 저장소·AWS 어디에도 남아 있지 않고, 전환 검증에 썼던 임시 매니페스트도 삭제되어 있다.
 - Alpha Tenant A와 B가 같은 Pool에서 `tenant_id`로 격리된다.
 - Bravo가 Alpha와 Application·Database·Redis·MongoDB·SQS·Secret을 공유하지 않는다.
 - Alpha Pod에서 Bravo Service·Database·Queue 접근이 실패한다.
 - 각 Pod Identity는 자기 Cell·자기 서비스 AWS Resource만 접근한다.
 - Frontend와 공개 API는 CloudFront·WAF·TLS를 통해서만 접근한다.
-- 내부 API와 Actuator 상세 Endpoint는 Public Ingress에서 접근할 수 없다.
+- 내부 API와 Actuator 상세 Endpoint는 `HTTPRoute`로 노출되지 않는다.
 - Payment 외 Pod의 임의 Internet Egress가 차단된다.
 - Outbox→SQS→Inbox 또는 Audit MongoDB 수렴과 중복 전달을 검증한다.
 - DLQ와 Outbox `FAILED`를 구분해 관측하고 재처리할 수 있다.
 - Database Migration, Rollback·Forward-fix와 Backup 복구 절차가 문서화된다.
 - Git, Image, Terraform State·Plan, Manifest와 Log에 Secret 원문이 없다.
+- Gateway API가 생성한 ALB·Target Group을 포함해 모든 AWS Resource에 `Team=team2` Tag가 적용되어 있다.
 
 ## 16. 확정 사항과 남은 결정
 
@@ -752,9 +885,14 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - 한 EKS Cluster에서 Cell Namespace를 공유할 수 있다.
 - Alpha는 여러 Tenant가 공유하는 Pool이며 Application의 `tenant_id`로 격리한다.
 - Bravo는 전용 Cell이며 Runtime·데이터·Queue·Secret을 Alpha와 분리한다.
-- 각 Backend Module은 자신의 Deployment·ClusterIP Service를 소유하고 Public Ingress를 소유하지 않는다.
-- Edge Ingress 하나가 `/api/v1`을 소유하며 명시 등록된 Route만 Provider ClusterIP로 전달한다.
-- Cell별 Edge Ingress를 해당 Cell의 Internal ALB에 연결한다.
+- 각 Backend Module은 자신의 Deployment·ClusterIP Service를 소유하고 어떤 `HTTPRoute`도 소유하지 않는다. `TargetGroupConfiguration`은 `HTTPRoute` `backendRef`인 `edge-api`만 소유하며 나머지 다섯 서비스는 갖지 않는다.
+- Edge `HTTPRoute` 하나가 `/api/v1`을 소유하며 명시 등록된 Route만 Provider ClusterIP로 전달한다.
+- Cell별 Gateway API(`GatewayClass`·`Gateway`·`LoadBalancerConfiguration`)가 Internal ALB를 생성하고 Edge `HTTPRoute`만 이 `Gateway`에 연결한다.
+- Cell별 ALB 이름은 `LoadBalancerConfiguration.loadBalancerName`으로 고정하며(Alpha는 `doro-erp-dev-alpha-gateway`), Terraform은 `data "aws_lb"`로 이 이름을 조회해 CloudFront VPC Origin에 연결한다(§7.6).
+- `Gateway`의 HTTPS Listener는 `hostname`(Alpha 예시: `origin.doro.minseok.click`)을 지정하고, AWS Load Balancer Controller가 기존 Regional ACM 인증서를 이 `hostname` 기준으로 자동 탐색해 연결한다(§7.2).
+- AWS Load Balancer Controller는 Gateway API 지원을 `--feature-gates=ALBGatewayAPI=true`(또는 배포 도구의 동등 설정)로 활성화하며, Kubernetes `Ingress`·`IngressClass`·`IngressClassParams` Resource는 목표 구성에 포함하지 않는다.
+- CloudFront와 CloudFront VPC Origin은 유지하며, VPC Origin의 대상만 기존 Ingress ALB에서 Gateway API ALB로 전환한다.
+- 모든 AWS Resource(Gateway API가 생성하는 ALB·Target Group 포함)에 `Team=team2` Tag를 유지한다.
 - PostgreSQL·MongoDB·Redis·SQS는 서비스 소유권 계약을 유지한다.
 - SQS Queue는 환경·Cell별로 분리하고 Event에 `cellId`를 넣지 않는다.
 - EKS Pod Identity와 서비스별 IAM 최소 권한을 사용한다.
@@ -773,13 +911,15 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 | NetworkPolicy | EKS CNI Policy Enforcement 또는 대체 구현 선택 |
 | 관측 Backend | CloudWatch 중심 범위와 Prometheus·Grafana 추가 여부 |
 | 전용 Cell 승격 | 어떤 계약·부하·보안 조건에서 별도 EKS·AWS Account로 이동할지 |
+| Gateway API 세부 Version | 정확한 CRD `apiVersion`과 AWS Load Balancer Controller Chart Version·`ALBGatewayAPI` Feature Gate의 정확한 설정 이름은 설치 시점의 공식 문서로 최종 확인 |
+| Origin Hostname 공유 범위 | `origin.doro.minseok.click`을 모든 Cell이 공유할지, Bravo 등 후속 Cell마다 별도 Hostname·ACM 인증서를 발급할지(§7.2) |
 
 미정 항목은 Application Domain·Port·Event 계약의 독립 개발을 막지 않는다. 다만 실제 AWS 연결과 운영 완료를 보고하기 전에는 반드시 결정하고 통합 테스트해야 한다.
 
 ## 17. 이 설계에서 하지 않는 것
 
 - Tenant마다 무조건 Namespace와 Application을 복제하지 않는다.
-- IngressGroup을 Tenant 인증 수단으로 사용하지 않는다.
+- Gateway API `HTTPRoute`를 Tenant 인증 수단으로 사용하지 않는다.
 - Namespace만 만들고 Cell 격리가 완료됐다고 판단하지 않는다.
 - 서비스 간 Database Join·Cross-Database Foreign Key를 만들지 않는다.
 - SQS를 주문·결제·대기열 상태 저장소로 사용하지 않는다.
@@ -788,5 +928,7 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - Audit Service를 원 업무 Transaction에서 동기 호출하지 않는다.
 - Argo CD에서 Terraform까지 임의 실행해 AWS Resource와 Kubernetes 상태의 책임을 섞지 않는다.
 - 운영 준비가 끝나기 전에 실제 Toss 운영 Key, 부분 취소, 다중 Region과 과도한 고가용성 범위를 추가하지 않는다.
+- Edge 이외 서비스에 `HTTPRoute`를 만들어 외부에 직접 노출하지 않는다.
+- 전환 완료 후에도 기존 `Ingress`·`IngressClass`·`IngressClassParams`나 §7.5 검증에 썼던 임시 Manifest를 저장소에 남겨두지 않는다.
 
 이 설계의 목적은 가장 복잡한 인프라를 만드는 것이 아니라, 팀이 독립적으로 개발한 여섯 Application을 안전하게 배포하고 Tenant·Cell·데이터·Event 경계를 설명하고 검증할 수 있게 만드는 것이다.
