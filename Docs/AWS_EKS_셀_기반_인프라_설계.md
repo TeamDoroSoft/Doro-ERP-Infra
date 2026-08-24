@@ -6,7 +6,7 @@
 >
 > 기준일: 2026-08-21
 >
-> 현재 구현 상태: Dev Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis·MongoDB Atlas 전용 Stack, 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Edge 단일 Public Ingress가 구현되었다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되었다. ALB HTTPS Listener·Regional ACM 인증서·NetworkPolicy·가용성 Manifest와 CloudWatch 중앙 Log·최소 Alarm은 코드에 반영되었으며 실제 AWS 검증이 남아 있다. Dev 배포는 승인된 ECR Digest를 Git에 기록한 뒤 수동 적용하고, 자동 CD와 Argo CD는 이 절차를 검증한 후 도입한다. **목표 Routing 방식은 Kubernetes Ingress에서 AWS Load Balancer Controller의 Gateway API(GatewayClass·Gateway·HTTPRoute·LoadBalancerConfiguration·TargetGroupConfiguration)로 전환됐다. 실제 Cell의 Ingress→Gateway API Cutover는 아직 수행 전이며 §7.5의 절차를 따른다.**
+> 현재 구현 상태: Prod Alpha AWS Foundation Terraform이 구현·적용되었고 ElastiCache Redis·MongoDB Atlas 전용 Stack, 여섯 Application의 Kustomize Base·Secrets Manager 연결, AWS Load Balancer Controller 권한·설치 값과 Edge 단일 Public Ingress가 구현되었다. GitHub OIDC 기반 ECR Push Role과 Service Image 게시 Workflow도 정의되었다. ALB HTTPS Listener·Regional ACM 인증서·NetworkPolicy·가용성 Manifest와 CloudWatch 중앙 Log·최소 Alarm은 코드에 반영되었으며 실제 AWS 검증이 남아 있다. Prod 배포는 승인된 ECR Digest를 Git에 기록한 뒤 수동 적용하고, 자동 CD와 Argo CD는 이 절차를 검증한 후 도입한다. **목표 Routing 방식은 Kubernetes Ingress에서 AWS Load Balancer Controller의 Gateway API(GatewayClass·Gateway·HTTPRoute·LoadBalancerConfiguration·TargetGroupConfiguration)로 전환됐다. 실제 Cell의 Ingress→Gateway API Cutover는 아직 수행 전이며 §7.5의 절차를 따른다.**
 
 ## 1. 문서의 목적
 
@@ -58,8 +58,8 @@ Tenant Domain
 | API Routing | AWS Load Balancer Controller Gateway API(GatewayClass·Gateway·HTTPRoute·LoadBalancerConfiguration·TargetGroupConfiguration)가 Cell별 Internal ALB를 생성하고, Edge 단일 HTTPRoute와 TargetGroupConfiguration이 `/api/v1`·Edge Target을 소유하며 Module은 ClusterIP만 소유 |
 | Frontend | Vue SPA를 S3에 배포하고 CloudFront OAC로만 접근 |
 | 관계형 데이터 | Amazon RDS for PostgreSQL, 서비스별 Database와 Role |
-| Session | Dev Alpha는 ElastiCache for Redis OSS 7.1 단일 Node, TLS·RBAC |
-| Audit | Dev Alpha 발표 환경은 MongoDB Atlas 8.0 M0 Free, NAT 고정 IP `/32` 허용 |
+| Session | Prod Alpha는 ElastiCache for Redis OSS 7.1 단일 Node, TLS·RBAC |
+| Audit | Prod Alpha 발표 환경은 MongoDB Atlas 8.0 M0 Free, NAT 고정 IP `/32` 허용 |
 | Messaging | Cell별 SQS FIFO Main Queue 3개와 FIFO DLQ 3개 |
 | Secret | AWS Secrets Manager, EKS Pod Identity 기반 최소 권한 |
 | 관측성 | CloudWatch Log·Metric·Alarm + Application Actuator·Micrometer |
@@ -321,7 +321,7 @@ Cell과 서비스마다 다음 Resource를 설정한다.
 - Readiness·Liveness·Startup Probe
 - HPA는 CPU Request 대비 평균 70%를 공통 초기 기준으로 적용하고 실제 부하 시험 후 서비스별 조정
 
-재사용 Base는 운영 후보 기준을 검증할 수 있도록 서비스별 최소 2 Replica를 두 AZ와 서로 다른 Node에 분산한다. Dev Alpha는 비용과 현재 운영 제약 때문에 단일 AZ를 사용하되, Hostname 분산으로 두 Replica를 서로 다른 Node에 배치한다. HPA는 CPU Resource Metric으로 Pod를 2개에서 최대 4개까지 조정하고 Cluster Autoscaler는 Managed Node를 2대에서 최대 4대까지 조정한다. PDB는 자발적 중단을 한 번에 한 Replica로 제한한다. Audit·Outbox Scheduler처럼 중복 실행 가능한 Worker는 Application의 Lease·멱등성 계약을 먼저 충족해야 한다. Metrics Server, 실제 Node 용량, HPA Condition, Node 증감과 Node Drain을 검증하기 전에는 자동 확장이 완료된 것으로 보지 않으며, 단일 AZ Dev 구성을 고가용성으로 판정하지 않는다.
+재사용 Base는 운영 후보 기준을 검증할 수 있도록 서비스별 최소 2 Replica를 두 AZ와 서로 다른 Node에 분산한다. Prod Alpha는 비용과 현재 운영 제약 때문에 단일 AZ를 사용하되, Hostname 분산으로 두 Replica를 서로 다른 Node에 배치한다. HPA는 CPU Resource Metric으로 Pod를 2개에서 최대 4개까지 조정하고 Cluster Autoscaler는 Managed Node를 2대에서 최대 4대까지 조정한다. PDB는 자발적 중단을 한 번에 한 Replica로 제한한다. Audit·Outbox Scheduler처럼 중복 실행 가능한 Worker는 Application의 Lease·멱등성 계약을 먼저 충족해야 한다. Metrics Server, 실제 Node 용량, HPA Condition, Node 증감과 Node Drain을 검증하기 전에는 자동 확장이 완료된 것으로 보지 않으며, 단일 AZ Prod 구성을 고가용성으로 판정하지 않는다.
 
 ## 7. 서비스별 Manifest와 Gateway API Routing
 
@@ -344,7 +344,7 @@ Cell Alpha
 ├─ HTTPRoute: edge-api-route (Edge 전용 1개, `/api/v1` → edge-api Service — backendRef는 이 하나뿐)
 └─ TargetGroupConfiguration: edge-api-tgconfig (Edge 전용 1개만 존재)
          ↓
-      ALB Alpha 1개(Gateway API가 생성, doro-erp-dev-alpha-gateway)
+      ALB Alpha 1개(Gateway API가 생성, doro-erp-prod-alpha-gateway)
 ```
 
 `HTTPRoute`의 `backendRef`가 `edge-api` 하나뿐이므로 ALB Target Group도 `edge-api` 하나만 생성된다. Store Access·Commerce·Payment·Queue·Audit는 Cluster 내부에서 ClusterIP로만 호출되고 ALB Target Group에 등록되지 않으므로, 이 다섯 서비스는 `TargetGroupConfiguration`을 만들지 않는다.
@@ -382,13 +382,13 @@ metadata:
   name: doro-alpha-alb-config
   namespace: doro-alpha
 spec:
-  loadBalancerName: doro-erp-dev-alpha-gateway   # §7.6 — 기존 Ingress ALB와 이름 충돌 방지를 위해 고정
+  loadBalancerName: doro-erp-prod-alpha-gateway   # §7.6 — 기존 Ingress ALB와 이름 충돌 방지를 위해 고정
   scheme: internal
   loadBalancerSubnets:
     - identifier: subnet-alpha-app-a
     - identifier: subnet-alpha-app-b
   securityGroups:
-    - doro-erp-dev-alpha-alb
+    - doro-erp-prod-alpha-alb
   manageBackendSecurityGroupRules: true
   listenerConfigurations:
     - protocolPort: HTTPS:443
@@ -396,7 +396,7 @@ spec:
   tags:
     Team: team2
     Cell: alpha
-    Environment: dev
+    Environment: prod
 ---
 # Gateway — Cell별 1개, 표준 Gateway API Resource
 apiVersion: gateway.networking.k8s.io/v1
@@ -502,7 +502,7 @@ Gateway API는 `parentRefs`로 여러 `HTTPRoute`를 하나의 `Gateway`에 붙�
 
 1. **Gateway ALB 생성**: 기존 Ingress·IngressGroup은 그대로 둔 채 Cell Namespace에 `GatewayClass`(Cluster에 아직 없다면 1회), `LoadBalancerConfiguration`, `Gateway`, Edge `HTTPRoute`와 Edge 전용 `TargetGroupConfiguration`을 추가로 배포한다. AWS Load Balancer Controller가 기존 Ingress ALB와는 **완전히 별개인 새 Internal ALB**를 생성한다 — 이 시점에는 CloudFront가 아직 새 ALB를 모른다.
 2. **검증**: `edge-api` Target Group(이 Cell에 존재하는 유일한 ALB Target Group) 하나의 Target Health가 `Healthy`인지, `HTTPRoute`의 `/api/v1` 매칭이 Edge까지 정상 응답하는지 확인한다. 이 확인에는 임시 Host Header 지정 호출이나 임시 Route 53 Record 같은 **테스트용 임시 매니페스트**를 사용할 수 있다.
-3. **VPC Origin 전환**: 검증이 끝나면 CloudFront Distribution의 `/api/*` VPC Origin이 가리키는 대상을 기존 Ingress ALB에서 새 Gateway ALB로 변경한다. Terraform은 `data "aws_lb" "gateway" { name = "doro-erp-dev-alpha-gateway" }`(§7.6)로 Kubernetes/AWS Load Balancer Controller가 생성한 새 ALB를 조회해 ARN·DNS Name을 얻고, CloudFront VPC Origin Resource가 이 값을 참조하도록 갱신한다. CloudFront 전파 지연을 고려해 Traffic이 낮은 시간대에 수행한다.
+3. **VPC Origin 전환**: 검증이 끝나면 CloudFront Distribution의 `/api/*` VPC Origin이 가리키는 대상을 기존 Ingress ALB에서 새 Gateway ALB로 변경한다. Terraform은 `data "aws_lb" "gateway" { name = "doro-erp-prod-alpha-gateway" }`(§7.6)로 Kubernetes/AWS Load Balancer Controller가 생성한 새 ALB를 조회해 ARN·DNS Name을 얻고, CloudFront VPC Origin Resource가 이 값을 참조하도록 갱신한다. CloudFront 전파 지연을 고려해 Traffic이 낮은 시간대에 수행한다.
 4. **CloudFront 검증**: 실제 Tenant Domain으로 `/api/v1` 요청이 새 ALB→Gateway→Edge까지 정상 처리되는지, WAF·TLS·Access Log가 정상 기록되는지 확인한다. 일정 관측 기간 동안 오류율·지연을 관찰한다. 문제가 발견되면 VPC Origin을 기존 ALB로 즉시 되돌린다(기존 Ingress·ALB가 아직 살아있으므로 Rollback 비용이 낮다).
 5. **기존 Ingress 및 ALB 제거**: 새 경로가 충분히 안정적임을 확인한 뒤에만 기존 Ingress·IngressGroup Manifest를 삭제한다. AWS Load Balancer Controller가 소유 Ingress 소멸에 맞춰 기존 ALB·Target Group을 정리한다.
 6. **임시 매니페스트 삭제**: 2단계에서 만든 검증용 임시 Host Header·임시 DNS·임시 Route 매니페스트를 저장소에서 삭제하고, 전환 완료 상태를 이 문서와 Infra README에 반영한다.
@@ -511,17 +511,17 @@ Gateway API는 `parentRefs`로 여러 `HTTPRoute`를 하나의 `Gateway`에 붙�
 
 전환 기간 동안 기존 Ingress가 만든 ALB와 Gateway API가 만든 ALB가 **동시에 존재**하므로(§7.5), 이름이 자동 생성 규칙으로 겹치거나 서로 다른 Terraform Data Source가 잘못된 ALB를 가리키는 사고를 막기 위해 새 ALB 이름을 고정한다.
 
-- `LoadBalancerConfiguration.spec.loadBalancerName`을 `doro-erp-dev-alpha-gateway`로 명시한다(§7.2 예시). 이 이름은 기존 Ingress ALB의 자동 생성 이름(`k8s-`로 시작하는 IngressGroup 기반 이름)과 겹치지 않는다.
+- `LoadBalancerConfiguration.spec.loadBalancerName`을 `doro-erp-prod-alpha-gateway`로 명시한다(§7.2 예시). 이 이름은 기존 Ingress ALB의 자동 생성 이름(`k8s-`로 시작하는 IngressGroup 기반 이름)과 겹치지 않는다.
 - CloudFront VPC Origin을 관리하는 Terraform 구성은 이 ALB를 직접 생성하지 않고 Kubernetes/AWS Load Balancer Controller가 생성한 ALB를 조회한다:
 
 ```hcl
 data "aws_lb" "gateway" {
-  name = "doro-erp-dev-alpha-gateway"
+  name = "doro-erp-prod-alpha-gateway"
 }
 ```
 
 - CloudFront VPC Origin Resource는 `data.aws_lb.gateway.arn`(또는 `dns_name`)을 참조하도록 갱신한다(§7.5 3단계).
-- Bravo Cell로 확장할 때는 같은 규칙으로 `doro-erp-dev-bravo-gateway`처럼 Cell별로 다른 고정 이름을 사용한다.
+- Bravo Cell로 확장할 때는 같은 규칙으로 `doro-erp-prod-bravo-gateway`처럼 Cell별로 다른 고정 이름을 사용한다.
 - 전환 완료 후 기존 Ingress ALB가 삭제되면 이 이름 충돌 우려는 사라지지만, `loadBalancerName` 고정 자체는 향후 재현 가능한 Terraform 조회를 위해 계속 유지한다.
 - 새 환경의 순환 의존성을 끊기 위해 Terraform은 필수 Boolean 입력 `enable_gateway_backend`를 사용한다. Foundation Apply에서는 명시적으로 `false`를 사용해 Gateway ALB Data Source와 CloudFront Backend 연결을 만들지 않고, Gateway ALB와 Edge Target이 준비된 뒤 `true`로 바꿔 VPC Origin·Origin DNS·ALB 경보를 연결한다. 기본값을 두지 않아 기존 환경에서 의도치 않은 Backend 제거를 막는다.
 
@@ -549,7 +549,7 @@ Alpha와 Bravo는 서로 다른 Database 자원을 사용한다. 전용 Cell의 
 
 | 단계 | Alpha 내부 구성 | Bravo 격리 |
 |---|---|---|
-| Dev·시연 | Cell별 RDS 1 Instance·4 DB | 별도 Instance 또는 명시적 미운영 |
+| Prod·시연 | Cell별 RDS 1 Instance·4 DB | 별도 Instance 또는 명시적 미운영 |
 | 운영 후보 | RDS PostgreSQL Multi-AZ·4 DB | 별도 RDS PostgreSQL |
 | 규모 확장 | 병목 서비스별 Instance 분리 | 전용 Instance·Backup·KMS 정책 |
 
@@ -559,7 +559,7 @@ Multi-AZ, Instance Class, Storage Auto Scaling, RPO·RTO와 Backup 보존일은 
 
 Redis는 Store Access의 직원 Session과 짧은 보안 상태만 저장한다. 주문·결제·대기열의 업무 정본으로 사용하지 않는다.
 
-Dev Alpha는 ElastiCache for Redis OSS 7.1로 확정한다. Data Subnet 두 개의 Subnet Group을 사용하되 비용 절감을 위해 Node는 한 개만 생성하고 자동 Failover는 끈다.
+Prod Alpha는 ElastiCache for Redis OSS 7.1로 확정한다. Data Subnet 두 개의 Subnet Group을 사용하되 비용 절감을 위해 Node는 한 개만 생성하고 자동 Failover는 끈다.
 
 | 선택 | 장점 | 부담·주의점 |
 |---|---|---|
@@ -581,7 +581,7 @@ Audit Service는 Cell 내부 업무 서비스의 Audit Event를 `audit.audit_rec
 - `expiresAt` TTL Index와 조회 시 논리 만료 조건을 함께 적용한다.
 - 기본 Retention은 90일이며 기존 Document에 정책을 암묵적으로 소급하지 않는다.
 
-Dev Alpha 발표 환경은 비용을 발생시키지 않는 MongoDB Atlas 8.0 M0 Free Cluster로 확정한다. EKS와 SSM 관리 EC2는 기존 `team2` NAT Gateway를 통해 TLS로 연결하고, Atlas Database Network Access에는 NAT의 고정 공인 IP `/32`만 허용한다. M0가 지원하지 않는 PrivateLink와 Cloud Backup/PIT는 발표 환경에서 사용하지 않으며 데이터는 재생성 가능한 Test Data로 제한한다. Audit Database User와 `AUDIT_MONGODB_URI`는 Terraform State에 비밀번호가 남지 않도록 Atlas Console과 AWS Secrets Manager에서 별도로 주입한다. Application 기동 후 Unique·조회·TTL Index 생성을 실제로 검증한다. 운영 전환 시에는 M10 이상 Dedicated Cluster, PrivateLink, Backup/PIT와 복구 목표를 별도로 적용한다.
+Prod Alpha 발표 환경은 비용을 발생시키지 않는 MongoDB Atlas 8.0 M0 Free Cluster로 확정한다. EKS와 SSM 관리 EC2는 Network Terraform이 만든 `team2` NAT Gateway를 통해 TLS로 연결하고, Atlas Database Network Access에는 NAT의 고정 공인 IP `/32`만 허용한다. M0가 지원하지 않는 PrivateLink와 Cloud Backup/PIT는 발표 환경에서 사용하지 않으며 데이터는 재생성 가능한 Test Data로 제한한다. Audit Database User와 `AUDIT_MONGODB_URI`는 Terraform State에 비밀번호가 남지 않도록 Atlas Console과 AWS Secrets Manager에서 별도로 주입한다. Application 기동 후 Unique·조회·TTL Index 생성을 실제로 검증한다. 운영 전환 시에는 M10 이상 Dedicated Cluster, PrivateLink, Backup/PIT와 복구 목표를 별도로 적용한다.
 
 ## 9. SQS FIFO와 Cell 격리
 
@@ -605,10 +605,10 @@ doro-erp-{environment}-{cellId}-{logicalBase}-dlq.fifo
 예시는 다음과 같다.
 
 ```text
-doro-erp-dev-alpha-commerce-events.fifo
-doro-erp-dev-alpha-commerce-events-dlq.fifo
-doro-erp-dev-bravo-audit-events.fifo
-doro-erp-dev-bravo-audit-events-dlq.fifo
+doro-erp-prod-alpha-commerce-events.fifo
+doro-erp-prod-alpha-commerce-events-dlq.fifo
+doro-erp-prod-bravo-audit-events.fifo
+doro-erp-prod-bravo-audit-events-dlq.fifo
 ```
 
 Application은 Queue 이름을 조립하지 않고 Terraform이 만든 URL·ARN을 설정으로 주입받는다. Event Body에는 `cellId`를 넣지 않는다. 어느 Cell Queue에 보낼지는 배포 설정과 IAM이 결정한다.
@@ -681,7 +681,7 @@ flowchart LR
     CODE[Application Commit]
     GA[GitHub Actions<br/>Test·Build]
     ECR[ECR<br/>Git SHA Image]
-    REVIEW[Dev Release 승인<br/>Digest 기록]
+    REVIEW[Prod Release 승인<br/>Digest 기록]
     ARGO[Argo CD<br/>후속 도입]
     EKS[EKS Cell Deployment]
 
@@ -697,7 +697,7 @@ flowchart LR
 1. Service 저장소의 대상 Module Test와 Root Check를 실행한다.
 2. 변경된 Application의 Image를 Git SHA Tag로 Build한다.
 3. 취약점과 Secret 검사를 통과한 Image를 ECR에 Push한다.
-4. Dev 운영자가 ECR의 전체 Git SHA Tag와 Digest 일치를 확인하고 대상 환경·Cell Overlay의 해당 서비스 Digest만 변경한다.
+4. Prod 운영자가 ECR의 전체 Git SHA Tag와 Digest 일치를 확인하고 대상 환경·Cell Overlay의 해당 서비스 Digest만 변경한다.
 5. 현재는 승인된 Git Commit을 수동 Apply한다. Argo CD 검증 뒤에는 같은 Commit을 Pull해 동기화한다.
 6. Readiness, Smoke Test와 핵심 Event 수렴을 확인한다.
 7. 실패하면 Git에 기록한 이전 Image Digest로 되돌린다. 적용된 Flyway Migration은 되돌리지 않고 Forward-fix한다.
@@ -740,7 +740,7 @@ CloudWatch Metric의 Cell Dimension에는 환경과 `cellId`를 포함한다. Ap
 - Actuator 상세·Prometheus Endpoint를 공개 `HTTPRoute`에 노출하지 않는다.
 - Health Probe와 운영 Metric 접근은 전용 Management Port, NetworkPolicy 또는 인증된 수집 경로로 제한한다.
 
-Dev Alpha는 CloudWatch Observability EKS Add-on의 Container Log 수집과 Enhanced Container
+Prod Alpha는 CloudWatch Observability EKS Add-on의 Container Log 수집과 Enhanced Container
 Insights를 우선 사용한다. Spring Boot ECS JSON Console Log에 환경·Cell과 MDC `requestId`를
 포함하고 CloudWatch Log Group 보존 기간을 Terraform으로 제한한다. EKS Failed Node, 서비스별
 Running Pod 부족, DLQ Message, ALB 자체·Target 5xx를 초기 Alarm으로 사용한다. Application
@@ -780,7 +780,7 @@ Doro-ERP-Infra/
 │  │  ├─ iam/
 │  │  └─ observability/
 │  └─ environments/
-│     ├─ dev/
+│     ├─ prod/
 │     └─ production/
 ├─ deploy/
 │  ├─ base/
@@ -800,8 +800,8 @@ Doro-ERP-Infra/
 │  │  ├─ observability/
 │  │  └─ pod-identity/
 │  └─ overlays/
-│     ├─ dev/alpha/                     # gateway.yaml, loadbalancerconfiguration.yaml(Cell별)
-│     ├─ dev/bravo/
+│     ├─ prod/alpha/                     # gateway.yaml, loadbalancerconfiguration.yaml(Cell별)
+│     ├─ prod/bravo/
 │     └─ production/
 └─ compose/
    ├─ compose.yaml
@@ -832,7 +832,7 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 
 - `doro-alpha` Namespace와 기본 차단 NetworkPolicy
 - 서비스별 Deployment·Service(Edge만 추가로 `TargetGroupConfiguration` 보유)
-- `doro-alpha` `LoadBalancerConfiguration`(`loadBalancerName=doro-erp-dev-alpha-gateway`, §7.6)·`Gateway`와 Edge 전용 `HTTPRoute`, Gateway API 기반 내부 ALB(§7.5 절차로 기존 Ingress ALB와 병행 후 전환)
+- `doro-alpha` `LoadBalancerConfiguration`(`loadBalancerName=doro-erp-prod-alpha-gateway`, §7.6)·`Gateway`와 Edge 전용 `HTTPRoute`, Gateway API 기반 내부 ALB(§7.5 절차로 기존 Ingress ALB와 병행 후 전환)
 - Alpha RDS·Redis·MongoDB·SQS·Secret 연결
 - Tenant A·B의 `tenant_id` 격리 Negative Test
 
@@ -866,7 +866,7 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - 여섯 Image가 ECR에 Git SHA Tag로 생성되고 독립 배포된다.
 - Edge `HTTPRoute` 하나만 Cell `Gateway`에 연결되고 다른 Module은 어떤 `HTTPRoute`도 소유하지 않는다.
 - ALB Target Group은 `edge-api` 하나만 존재하며 다른 다섯 서비스는 `TargetGroupConfiguration`을 갖지 않는다.
-- Gateway API ALB의 실제 이름이 `LoadBalancerConfiguration.loadBalancerName`으로 고정한 값(`doro-erp-dev-alpha-gateway` 등)과 일치하고, Terraform `data "aws_lb"`가 이 이름으로 정상 조회된다.
+- Gateway API ALB의 실제 이름이 `LoadBalancerConfiguration.loadBalancerName`으로 고정한 값(`doro-erp-prod-alpha-gateway` 등)과 일치하고, Terraform `data "aws_lb"`가 이 이름으로 정상 조회된다.
 - §7.5 전환 완료 후 기존 Kubernetes `Ingress`·`IngressClass`·`IngressClassParams`와 구 ALB가 저장소·AWS 어디에도 남아 있지 않고, 전환 검증에 썼던 임시 매니페스트도 삭제되어 있다.
 - Alpha Tenant A와 B가 같은 Pool에서 `tenant_id`로 격리된다.
 - Bravo가 Alpha와 Application·Database·Redis·MongoDB·SQS·Secret을 공유하지 않는다.
@@ -893,7 +893,7 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 - 각 Backend Module은 자신의 Deployment·ClusterIP Service를 소유하고 어떤 `HTTPRoute`도 소유하지 않는다. `TargetGroupConfiguration`은 `HTTPRoute` `backendRef`인 `edge-api`만 소유하며 나머지 다섯 서비스는 갖지 않는다.
 - Edge `HTTPRoute` 하나가 `/api/v1`을 소유하며 명시 등록된 Route만 Provider ClusterIP로 전달한다.
 - Cell별 Gateway API(`GatewayClass`·`Gateway`·`LoadBalancerConfiguration`)가 Internal ALB를 생성하고 Edge `HTTPRoute`만 이 `Gateway`에 연결한다.
-- Cell별 ALB 이름은 `LoadBalancerConfiguration.loadBalancerName`으로 고정하며(Alpha는 `doro-erp-dev-alpha-gateway`), Terraform은 `data "aws_lb"`로 이 이름을 조회해 CloudFront VPC Origin에 연결한다(§7.6).
+- Cell별 ALB 이름은 `LoadBalancerConfiguration.loadBalancerName`으로 고정하며(Alpha는 `doro-erp-prod-alpha-gateway`), Terraform은 `data "aws_lb"`로 이 이름을 조회해 CloudFront VPC Origin에 연결한다(§7.6).
 - `Gateway`의 HTTPS Listener는 `hostname`(Alpha 예시: `origin.doro.minseok.click`)을 지정하고, AWS Load Balancer Controller가 기존 Regional ACM 인증서를 이 `hostname` 기준으로 자동 탐색해 연결한다(§7.2).
 - AWS Load Balancer Controller는 Gateway API 지원을 `--feature-gates=ALBGatewayAPI=true`(또는 배포 도구의 동등 설정)로 활성화하며, Kubernetes `Ingress`·`IngressClass`·`IngressClassParams` Resource는 목표 구성에 포함하지 않는다.
 - CloudFront와 CloudFront VPC Origin은 유지하며, VPC Origin의 대상만 기존 Ingress ALB에서 Gateway API ALB로 전환한다.
@@ -908,7 +908,7 @@ Cell마다 Base를 복사하지 않는다. 공통 Base를 재사용하고 Namesp
 |---|---|
 | MongoDB | Atlas 운영 Tier·다중 Region, Backup/PIT 보존, 비용과 TTL 복구 정책 |
 | Redis | ElastiCache Multi-AZ·Replica·자동 Failover와 Session 유실 허용 범위 |
-| RDS | Dev·운영 Instance Class, Multi-AZ, Backup 보존, RPO·RTO |
+| RDS | Prod·운영 Instance Class, Multi-AZ, Backup 보존, RPO·RTO |
 | EKS | Node Group Size, 최소 Replica, HPA 기준과 비용 상한 |
 | Edge | Cell별 CloudFront·S3 완전 분리 여부와 Domain 발급 절차 |
 | Secret 연동 | CSI Driver, External Secrets 등 Kubernetes 주입 방식 |

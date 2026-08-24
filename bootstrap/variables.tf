@@ -1,5 +1,5 @@
 variable "aws_account_id" {
-  description = "AWS account in which the Doro ERP dev infrastructure is created."
+  description = "AWS account in which the Doro ERP prod infrastructure is created."
   type        = string
   default     = "727646470302"
 
@@ -10,7 +10,7 @@ variable "aws_account_id" {
 }
 
 variable "aws_region" {
-  description = "AWS region for the Doro ERP dev environment."
+  description = "AWS region for the Doro ERP prod environment."
   type        = string
   default     = "ap-northeast-2"
 }
@@ -25,7 +25,7 @@ variable "aws_profile" {
 variable "state_bucket_name" {
   description = "Globally unique S3 bucket for Terraform state."
   type        = string
-  default     = "doro-erp-dev-tfstate-727646470302-ap-northeast-2"
+  default     = "doro-erp-prod-tfstate-727646470302-ap-northeast-2"
 
   validation {
     condition     = can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.state_bucket_name))
@@ -54,4 +54,10 @@ variable "github_oidc_provider_arn" {
   description = "Existing GitHub Actions OIDC provider in the shared AWS account."
   type        = string
   default     = "arn:aws:iam::727646470302:oidc-provider/token.actions.githubusercontent.com"
+}
+
+variable "ssm_operator_group_name" {
+  description = "Existing IAM group whose members may open audited Prod SSM sessions."
+  type        = string
+  default     = "team2-doro-load-group"
 }

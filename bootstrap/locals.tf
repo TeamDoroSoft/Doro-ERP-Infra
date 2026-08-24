@@ -1,20 +1,20 @@
 locals {
   common_tags = {
     Project     = "Doro-ERP"
-    Environment = "dev"
+    Environment = "prod"
     Cell        = "alpha"
     Team        = "team2"
     ManagedBy   = "terraform"
   }
 
-  terraform_role_name                  = "doro-erp-dev-terraform"
-  workload_boundary_name               = "doro-erp-guardrail-dev"
-  project_role_arn_pattern             = "arn:aws:iam::${var.aws_account_id}:role/doro-erp-dev-*"
-  project_policy_arn_pattern           = "arn:aws:iam::${var.aws_account_id}:policy/doro-erp-dev-*"
-  project_instance_profile_arn_pattern = "arn:aws:iam::${var.aws_account_id}:instance-profile/doro-erp-dev-*"
+  terraform_role_name                  = "doro-erp-prod-terraform"
+  workload_boundary_name               = "doro-erp-guardrail-prod"
+  project_role_arn_pattern             = "arn:aws:iam::${var.aws_account_id}:role/doro-erp-prod-*"
+  project_policy_arn_pattern           = "arn:aws:iam::${var.aws_account_id}:policy/doro-erp-prod-*"
+  project_instance_profile_arn_pattern = "arn:aws:iam::${var.aws_account_id}:instance-profile/doro-erp-prod-*"
   workload_boundary_arn                = "arn:aws:iam::${var.aws_account_id}:policy/${local.workload_boundary_name}"
 
-  team2_doroload_ssm_access_policy_arn = "arn:aws:iam::${var.aws_account_id}:policy/team2-doroload-ssm-access-policy"
+  prod_ssm_access_policy_arn = "arn:aws:iam::${var.aws_account_id}:policy/doro-erp-prod-ssm-access"
 
   # Canonical GitHub Actions ECR push role. See
   # bootstrap/doro-erp-service-ecr-publisher.tf.

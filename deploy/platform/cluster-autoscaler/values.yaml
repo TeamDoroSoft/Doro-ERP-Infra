@@ -1,5 +1,5 @@
 autoDiscovery:
-  clusterName: doro-erp-dev
+  clusterName: doro-erp-prod
 
 awsRegion: ap-northeast-2
 cloudProvider: aws

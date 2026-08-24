@@ -1,0 +1,3 @@
+redis_user_id            = "doro-erp-prod-alpha-default"
+redis_node_type          = "cache.t4g.micro"
+snapshot_retention_limit = 1

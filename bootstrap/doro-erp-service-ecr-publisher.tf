@@ -1,11 +1,9 @@
 # Canonical GitHub Actions role for publishing Doro ERP service images to
-# ECR. Doro-ERP-Service's dev Environment variable AWS_ECR_PUSH_ROLE_ARN
+# ECR. Doro-ERP-Service's prod Environment variable AWS_ECR_PUSH_ROLE_ARN
 # points at this role's ARN.
 #
-# This role was originally created manually in the AWS console (the
-# now-removed doro-erp-dev-github-ecr-push had never actually been assumed),
-# then imported here as-is and confirmed as the resource actually in use.
-# See Docs/IAM_리소스_정리_및_Bootstrap_State_협의사항.md for the investigation.
+# The old environment role is removed during the full rebuild. Bootstrap
+# creates this canonical publisher role for the new Prod GitHub Environment.
 
 data "aws_iam_policy_document" "doro_erp_service_ecr_publisher_assume" {
   statement {
@@ -28,8 +26,8 @@ data "aws_iam_policy_document" "doro_erp_service_ecr_publisher_assume" {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:TeamDoroSoft/Doro-ERP-Service:environment:dev",
-        "repo:TeamDoroSoft@305760709/Doro-ERP-Service@1314731823:environment:dev"
+        "repo:TeamDoroSoft/Doro-ERP-Service:environment:prod",
+        "repo:TeamDoroSoft@305760709/Doro-ERP-Service@1314731823:environment:prod"
       ]
     }
   }

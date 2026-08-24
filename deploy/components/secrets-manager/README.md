@@ -11,7 +11,7 @@ AWS Secrets Manager JSON
 → Deployment envFrom
 ```
 
-Port, Timeout, 내부 Service URL, Queue URL, Batch·Retention과 활성화 Flag는 Secret이 아니므로 Dev Alpha ConfigMap에서 관리한다. `AWS_ACCESS_KEY_ID`와 `AWS_SECRET_ACCESS_KEY`는 저장하지 않고 Pod Identity를 사용한다.
+Port, Timeout, 내부 Service URL, Queue URL, Batch·Retention과 활성화 Flag는 Secret이 아니므로 Prod Alpha ConfigMap에서 관리한다. `AWS_ACCESS_KEY_ID`와 `AWS_SECRET_ACCESS_KEY`는 저장하지 않고 Pod Identity를 사용한다.
 
 ## Secret 입력
 
@@ -21,7 +21,7 @@ Terraform은 Secret Container와 IAM 권한만 만든다. 실제 값은 AWS Cons
 AWS Console
 → Secrets Manager
 → Secrets
-→ 대상 doro-erp/dev/alpha/... Secret
+→ 대상 doro-erp/prod/alpha/... Secret
 → Retrieve secret value
 → Edit
 → Key/value 또는 Plaintext JSON 입력
@@ -29,9 +29,9 @@ AWS Console
 
 서비스별 JSON Key는 다음과 같다.
 
-아래 빈 문자열은 Schema 예시일 뿐이다. 저장하기 전에 모든 값을 실제 Dev Credential로 채우며, 빈 값이 남은 JSON을 Secret Version으로 저장하지 않는다.
+아래 빈 문자열은 Schema 예시일 뿐이다. 저장하기 전에 모든 값을 실제 Prod Credential로 채우며, 빈 값이 남은 JSON을 Secret Version으로 저장하지 않는다.
 
-### `doro-erp/dev/alpha/store-access`
+### `doro-erp/prod/alpha/store-access`
 
 ```json
 {
@@ -47,7 +47,7 @@ AWS Console
 }
 ```
 
-### `doro-erp/dev/alpha/commerce`
+### `doro-erp/prod/alpha/commerce`
 
 ```json
 {
@@ -57,7 +57,7 @@ AWS Console
 }
 ```
 
-### `doro-erp/dev/alpha/payment`
+### `doro-erp/prod/alpha/payment`
 
 ```json
 {
@@ -69,7 +69,7 @@ AWS Console
 }
 ```
 
-### `doro-erp/dev/alpha/queue`
+### `doro-erp/prod/alpha/queue`
 
 ```json
 {
@@ -79,7 +79,7 @@ AWS Console
 }
 ```
 
-### `doro-erp/dev/alpha/audit`
+### `doro-erp/prod/alpha/audit`
 
 ```json
 {
@@ -87,7 +87,7 @@ AWS Console
 }
 ```
 
-Edge에는 서비스 전용 민감값이 없으며 방향별 HMAC만 주입한다. Terraform이 만드는 `doro-erp/dev/alpha/edge` Container는 향후 Edge 전용 Secret을 위한 예약 공간이다.
+Edge에는 서비스 전용 민감값이 없으며 방향별 HMAC만 주입한다. Terraform이 만드는 `doro-erp/prod/alpha/edge` Container는 향후 Edge 전용 Secret을 위한 예약 공간이다.
 
 ## 방향별 HMAC Secret
 
@@ -115,7 +115,7 @@ openssl rand -base64 32
 
 ## Kustomize 연결
 
-Dev Alpha Overlay의 `kustomization.yaml`에 Component를 추가한다.
+Prod Alpha Overlay의 `kustomization.yaml`에 Component를 추가한다.
 
 ```yaml
 components:
