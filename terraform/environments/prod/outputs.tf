@@ -88,6 +88,16 @@ output "frontend_url" {
   value       = "https://${var.domain_name}"
 }
 
+output "route53_public_hosted_zone_id" {
+  description = "Bootstrap-managed Route 53 public hosted zone ID."
+  value       = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_id
+}
+
+output "route53_public_hosted_zone_name_servers" {
+  description = "Authoritative name servers that the domain registrar must delegate to."
+  value       = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_name_servers
+}
+
 output "backend_api_base_url" {
   description = "Prod Alpha API base URL routed by CloudFront to the internal ALB."
   value       = var.enable_gateway_backend ? "https://${var.domain_name}/api" : null

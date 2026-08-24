@@ -100,7 +100,7 @@ data "aws_iam_policy_document" "terraform_state" {
       test     = "ArnNotEquals"
       variable = "aws:PrincipalArn"
       values = concat(
-        sort(tolist(var.terraform_operator_principal_arns)),
+        sort(tolist(local.terraform_operator_principal_arns)),
         [
           "arn:aws:iam::${var.aws_account_id}:root",
           aws_iam_role.terraform_execution.arn

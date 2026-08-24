@@ -17,6 +17,7 @@
 - 별도 AWS Prod Account를 만들지 않고 현재 사용하는 한 AWS Account에 구축한다.
 - `prod` 환경의 `alpha` Cell만 구축한다.
 - AWS 자원은 Terraform으로 관리한다.
+- 계정에 이미 존재하는 네 명의 IAM User는 재사용하되, 프로젝트 IAM Group·Role·Policy와 GitHub OIDC Provider는 Bootstrap Terraform이 생성한다.
 - Kubernetes 자원의 선언은 Kustomize로 관리한다. 초기 통합 단계에서는 승인된 Overlay를 수동 적용하고, 도입 가능 기준을 충족한 뒤 Argo CD가 같은 선언을 GitOps 방식으로 동기화한다.
 - GitHub Actions가 테스트·이미지 빌드·ECR Push를 담당한다.
 - 별도 `dev` AWS 환경은 만들지 않고 Local·CI 검증을 통과한 Image만 이 환경에 배포한다.
@@ -44,6 +45,7 @@
 | Secret | AWS Secrets Manager, 서비스별 EKS Pod Identity, AWS Secrets Store CSI Provider |
 | 관리 접속 | CloudShell의 `kubectl`로 EKS 관리, SSM으로 Worker Node와 전용 관리 EC2 접속 |
 | Prod Domain | `doro.minseok.click` |
+| Public DNS | Bootstrap Terraform이 Route 53 Public Hosted Zone `minseok.click` 생성, 등록기관에서 NS 위임 |
 | 관리 태그 | `Project=Doro-ERP`, `Environment=prod`, `Cell=alpha`, `Team=team2`, `ManagedBy=terraform` |
 
 ## 3. AZ 구성 원칙
@@ -85,7 +87,7 @@ Kubernetes Service CIDR는 VPC, VPN, 팀원 로컬 네트워크와 겹치지 않
 
 Network는 `environments/prod/network/terraform.tfstate`, Foundation은 `environments/prod/terraform.tfstate`를 사용한다. Redis와 Atlas도 각각 별도 State를 사용한다. Apply는 Network→Foundation→Redis→Atlas 순서이며 Destroy는 반대 순서다.
 
-Frontend S3와 Terraform Backend S3는 Network State에 포함하지 않는다. 기존 `team2-DoroLoad` VPC는 새 Network State가 소유하지 않으므로 기존 의존 자원을 정리한 뒤 별도로 삭제한다. 신규 자원은 `doro-erp-prod-*` 이름과 `Team=team2`를 포함한 공통 Tag로 구분한다.
+Frontend S3와 Terraform Backend S3는 Network State에 포함하지 않는다. Terraform Backend S3와 Route 53 Public Hosted Zone은 Bootstrap State, Frontend S3는 Foundation State가 생성한다. Foundation은 Bootstrap Remote State에서 Hosted Zone ID를 읽는다. 신규 자원은 `doro-erp-prod-*` 이름과 `Team=team2`를 포함한 공통 Tag로 구분한다.
 
 ### 4.3 NAT와 Private AWS 접근
 
@@ -121,6 +123,9 @@ Frontend S3와 Terraform Backend S3는 Network State에 포함하지 않는다. 
 - SSH 22번 Port를 공개하지 않고 감사 가능한 전용 Session Document와 IAM 권한을 접속 경계로 사용한다.
 - Shell 입출력은 `/doro-erp/prod/ssm-sessions` CloudWatch Log Group에 30일 보존하며 Idle 20분, 최대 60분으로 제한한다.
 - 명령 기록이 지원되지 않는 SSM SSH와 Port Forwarding Session은 사용자 정책에서 허용하지 않는다.
+- Bootstrap은 `team2-doro-load-group`을 생성하고 `a-student-02`, `a-student-06`, `b-student-05`, `b-student-11`을 정확한 멤버십으로 관리한다.
+- Terraform 실행 Role을 Assume하는 운영자는 `a-student-02`, `a-student-06`, `b-student-05`, `b-student-11` 네 명으로 관리한다.
+- Bootstrap은 네 운영자를 `doro-erp-prod-terraform-operators` Group에 넣고 `doro-erp-prod-terraform` Role을 Assume하는 Identity Policy도 함께 연결한다.
 
 ## 5. EKS와 Application 구성
 
@@ -177,7 +182,7 @@ Terraform을 직접 실행하는 팀원은 공유 Access Key를 사용하지 않
 - 현재 Bootstrap Principal: `arn:aws:iam::727646470302:user/b-student-05`
 - Trust Policy: 최초에는 현재 Bootstrap Principal만 Assume을 허용하고, Terraform을 직접 실행할 팀원이 생길 때 해당 Principal ARN을 추가
 - Permission Policy: 이 문서의 Prod 자원 생성·조회·변경·삭제 범위로 제한
-- GitHub Actions: Account에 등록된 `token.actions.githubusercontent.com` OIDC Provider를 재사용하고 프로젝트 전용 Role을 생성한다. 장기 Access Key를 사용하지 않으며 GitHub Organization ID `305760709`, Service Repository ID `1314731823`과 `prod` Environment를 포함한 immutable Subject로 신원을 제한한다.
+- GitHub Actions: Bootstrap이 `token.actions.githubusercontent.com` OIDC Provider와 프로젝트 전용 Role을 생성한다. 장기 Access Key를 사용하지 않으며 GitHub Organization ID `305760709`, Service Repository ID `1314731823`과 `prod` Environment를 포함한 Subject로 신원을 제한한다.
 - Terraform State: `doro-erp-prod-tfstate-727646470302-ap-northeast-2` S3 Bucket에 Versioning과 암호화를 적용하고 S3 Lockfile 사용
 - Credential, Secret 원문, `.env`는 Git과 Terraform 변수 기본값에 저장하지 않음
 
@@ -191,7 +196,7 @@ EKS API Endpoint는 Private Access를 활성화하고, 초기 개발 편의를 �
 
 Application 개발·검토만 수행하는 팀원은 이 등록이 필요하지 않다. Terraform `plan` 또는 `apply`를 직접 실행할 팀원만 다음 절차로 등록한다. Access Key, Secret Access Key와 Session Token은 전달하지 않고 Principal ARN만 공유한다.
 
-#### 1단계: 팀원이 자신의 Principal ARN 확인
+#### 1단계: 팀원이 자신의 IAM User 이름 확인
 
 권한을 추가할 팀원이 자신의 AWS 인증으로 다음 명령을 실행한다.
 
@@ -199,30 +204,39 @@ Application 개발·검토만 수행하는 팀원은 이 등록이 필요하지 
 aws sts get-caller-identity --profile erp-prod --output json
 ```
 
-출력의 `Arn`을 인프라 담당자에게 전달한다. IAM User라면 다음과 같은 형태다.
+출력의 `Arn`에서 마지막 IAM User 이름을 확인한다. IAM User라면 다음과 같은 형태다.
 
 ```text
 arn:aws:iam::727646470302:user/IAM_USER_NAME
 ```
 
-`Account`, `Arn`과 `UserId`는 인증 정보 원문이 아니지만 필요한 값은 `Arn`뿐이다. AWS CLI 설정 파일, Access Key, Secret Access Key와 Session Token은 전달하거나 Git에 Commit하지 않는다.
+`Account`, `Arn`과 `UserId`는 인증 정보 원문이 아니지만 Terraform에 필요한 값은 IAM User
+이름뿐이다. AWS CLI 설정 파일, Access Key, Secret Access Key와 Session Token은 전달하거나
+Git에 Commit하지 않는다.
 
-#### 2단계: Terraform Role의 Trust Policy에 Principal 추가
+#### 2단계: Terraform 운영자 Group 멤버 추가
 
-`doro-erp-prod-terraform` Role을 관리하는 Terraform 변수에 승인된 팀원의 ARN을 추가한다. IAM Console에서 수동으로 Trust Policy를 수정하지 않는다.
+Bootstrap의 `terraform_operator_user_names`에 승인된 팀원의 IAM User 이름을 추가한다. IAM
+Console에서 Group, 정책 또는 Trust Policy를 수동으로 수정하지 않는다.
 
 ```hcl
-terraform_operator_principal_arns = [
-  "arn:aws:iam::727646470302:user/b-student-05",
-  "arn:aws:iam::727646470302:user/IAM_USER_NAME"
+terraform_operator_user_names = [
+  "a-student-02",
+  "a-student-06",
+  "b-student-05",
+  "b-student-11"
 ]
 ```
 
-Trust Policy의 `Principal.AWS`에는 이 목록만 사용한다. `*` 또는 Account 전체 `root` Principal로 확대하지 않는다. Role을 Assume할 주체를 추가하는 변경이므로 Pull Request 검토 후 Bootstrap Terraform에서 Apply한다.
+Bootstrap은 이 목록을 `doro-erp-prod-terraform-operators` Group의 정확한 멤버십,
+`sts:AssumeRole` Identity Policy와 Role Trust Policy에 함께 반영한다. `*` 또는 Account 전체
+`root` Principal로 확대하지 않는다. Role을 Assume할 주체를 추가하는 변경이므로 Pull Request
+검토 후 Bootstrap Terraform에서 Apply한다.
 
-#### 3단계: 팀원 Principal에 AssumeRole 호출 권한 확인
+#### 3단계: Terraform이 만든 AssumeRole 권한 확인
 
-팀원 Principal에는 대상 Role에 대한 다음 권한이 필요하다. 이미 상위 정책이 허용하더라도 실제 권한은 `sts:AssumeRole` 테스트로 확인한다.
+Bootstrap이 다음 권한의 관리형 정책을 운영자 Group에 연결한다. 사용자에게 같은 정책을
+수동으로 다시 붙이지 않는다.
 
 ```json
 {
@@ -455,10 +469,10 @@ Prod 자동 Sync의 목표 정책은 `selfHeal=true`, `prune=true`다. 다만 �
 - RDS Backup 보존일
 - ElastiCache Snapshot 보존과 운영 Atlas Cloud Backup·PIT 보존 기간
 - 팀원별 EKS Public Endpoint 허용 CIDR
-- `doro.minseok.click`, Route 53 Hosted Zone `minseok.click`과 ACM 인증서
+- 도메인 등록기관에서 Terraform 출력의 Route 53 네임서버로 `minseok.click` NS 위임
 - Argo CD 자체 설치 또는 EKS Managed Capability 선택과 비용
 - Argo CD Git Repository 인증, AppProject·Application 구성과 운영 주체
-- 추가 팀원이 Terraform을 직접 실행해야 할 경우에만 해당 팀원의 인증 Principal ARN
+- 추가 팀원이 Terraform을 직접 실행해야 할 경우에만 해당 팀원의 IAM User 이름
 
 ## 13. AWS 공식 제약 근거
 

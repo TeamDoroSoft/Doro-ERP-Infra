@@ -16,6 +16,7 @@
 - Service GitHub Actions가 OIDC로 Assume하는 ECR Image Push 전용 Role
 - AWS Load Balancer Controller IAM Policy·Role과 Pod Identity Association
 - 비공개 Frontend S3, CloudFront, WAF, Viewer용 us-east-1 ACM, ALB용 Regional ACM, `doro.minseok.click`
+- Bootstrap이 만든 Public Route 53 Hosted Zone `minseok.click`에 Terraform이 관리하는 DNS Record
 
 Network, Redis와 MongoDB는 Foundation과 State 수명주기를 분리한다. [`network/`](network/README.md)를 먼저 Apply한 뒤 Foundation, [`redis/`](redis/README.md), [`mongodb-atlas/`](mongodb-atlas/README.md) 순서로 실행한다.
 
@@ -33,6 +34,15 @@ Frontend S3는 이 Foundation State가 새로 생성한다.
 이 변수는 안전을 위해 기본값이 없으며 매 Plan에서 `terraform.tfvars`로 명시해야 한다.
 기존 CloudFront Backend가 서비스 중인 환경에서 `false`를 적용하면 Backend Origin이 제거되므로
 재구축 또는 승인된 제거 작업이 아니라면 적용하지 않는다.
+
+Bootstrap Apply에서 `minseok.click` Public Hosted Zone을 먼저 생성하고, 등록기관 NS 위임과
+외부 DNS 전파를 확인한 뒤 Foundation을 Apply한다. Foundation은 Bootstrap Remote State의 Zone ID를
+사용해 ACM 검증과 Frontend·Origin Record를 만든다. 도메인 등록 자체와 등록기관 설정은 AWS
+Terraform 범위가 아니다.
+
+```bash
+terraform -chdir=../../../bootstrap output route53_public_hosted_zone_name_servers
+```
 
 ## 1. CloudShell 준비
 
@@ -291,9 +301,9 @@ repo:TeamDoroSoft@305760709/Doro-ERP-Service@1314731823:environment:prod
 `prod` Environment의 Deployment Branch Rule도 `main`으로 제한한다. Workflow 역시 다른 Branch에서는
 Publish Job을 실행하지 않는다.
 
-장기 Access Key를 GitHub Secret에 등록하지 않는다. GitHub Organization 또는 AWS Account가 소유한
-`token.actions.githubusercontent.com` OIDC Provider가 먼저 존재해야 하며, 이 Stack은 기존 Provider를
-Data Source로 조회해 재사용한다.
+장기 Access Key를 GitHub Secret에 등록하지 않는다. Bootstrap Stack이 AWS Account의
+`token.actions.githubusercontent.com` OIDC Provider를 생성하고 ECR Publisher Role이 이를 참조한다.
+GitHub Organization, Repository, Environment와 GitHub App은 AWS 밖의 선행조건이다.
 
 ## 10.1 중앙 Log와 최소 Alarm 확인
 

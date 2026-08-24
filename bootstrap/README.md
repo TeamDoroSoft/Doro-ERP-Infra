@@ -1,13 +1,22 @@
 # Terraform Bootstrap
 
-이 Stack은 Doro ERP Prod Terraform State Bucket과 실행 IAM Role을 만든다. AWS Account에 이미 있는 GitHub Actions OIDC Provider는 조회해 재사용한다. ECR Push Role의 단일 Terraform 소유자이며, Prod Stack은 이 Role을 조회만 한다. ECR Push Role의 신뢰 관계는 GitHub Organization ID `305760709`, Service Repository ID `1314731823`과 `prod` Environment를 포함한 immutable Subject로 제한한다.
+이 Stack은 Doro ERP Prod Terraform State Bucket, Route 53 Public Hosted Zone, 실행 IAM Role,
+GitHub Actions OIDC Provider, ECR Push Role과 Prod SSM 운영자 IAM Group을 생성한다. IAM 사용자
+자체와 등록된 `minseok.click` 도메인만 계정·등록기관 선행조건이며,
+SSM Group의 멤버십은 `ssm_operator_user_names`의 정확한 목록으로 관리한다. ECR Push Role의
+신뢰 관계는 GitHub Organization ID `305760709`, Service Repository ID `1314731823`과
+`prod` Environment를 포함한 Subject로 제한한다.
 
 ## 최초 Bootstrap
 
-최초 실행에는 아직 S3 Backend가 없으므로 현재 `erp-prod` 개인 Profile과 로컬 State로 실행한다. `backend.s3.tf.example`은 이 단계에서 `.tf` 확장자로 바꾸지 않는다.
+최초 실행에는 S3 Backend와 `doro-erp-prod-terraform` Role이 아직 없으므로 권한 있는 개인
+Source Profile(`erp-prod-source`)과 Local State로 실행한다. Source IAM 사용자는 이 Stack의
+S3·Route 53·IAM Group·Membership·Policy·Role·OIDC Provider를 생성할 권한이 있어야 한다. Terraform은
+실행 주체에게 없는 권한을 스스로 부여할 수 없다. `backend.s3.tf.example`은 이 단계에서
+`.tf` 확장자로 바꾸지 않는다.
 
 ```powershell
-$env:AWS_PROFILE = "erp-prod"
+$env:AWS_PROFILE = "erp-prod-source"
 $env:AWS_REGION = "ap-northeast-2"
 
 terraform init
@@ -16,6 +25,15 @@ terraform validate
 terraform plan -out bootstrap.tfplan
 terraform apply bootstrap.tfplan
 ```
+
+Apply가 끝나면 기존 `minseok.click` 등록기관의 네임서버 설정을 다음 Output의 네 개 값으로
+교체한다. 기존 DNS Record가 있다면 NS를 바꾸기 전에 새 Hosted Zone으로 먼저 옮긴다.
+
+```powershell
+terraform output route53_public_hosted_zone_name_servers
+```
+
+외부 DNS에서 새 네임서버 위임이 확인되기 전에는 ACM을 생성하는 Foundation Apply로 넘어가지 않는다.
 
 AWS Console CloudShell에서는 별도 Profile을 지정하지 않는다.
 
@@ -46,10 +64,14 @@ terraform plan
 
 ## 이후 변경
 
-- 승인된 `terraform_operator_principal_arns`만 Terraform Role을 Assume한다.
+- `doro-erp-prod-terraform-operators` Group과 AssumeRole 정책도 Bootstrap이 생성하며 기본 멤버는 `a-student-02`, `a-student-06`, `b-student-05`, `b-student-11`이다.
+- 승인된 `terraform_operator_user_names`와 `terraform_operator_additional_principal_arns`만 Terraform Role을 Assume한다.
+- `team2-doro-load-group`은 Terraform이 생성하며 기본 멤버는 `a-student-02`, `a-student-06`, `b-student-05`, `b-student-11`이다.
+- `aws_iam_group_membership`은 목록 전체를 배타적으로 관리하므로 Console에서 임의로 추가한 멤버는 다음 Apply에서 제거될 수 있다.
+- IAM 사용자 생성과 Login Profile·Access Key 관리는 이 Stack 범위가 아니다.
 - Terraform 실행 Role은 자기 IAM 정책과 Trust Policy를 변경할 수 없다. Bootstrap IAM 변경은 승인된 개인 Source Principal로만 Plan·Apply한다.
 - Foundation 이후 Stack은 개인 Source Credential이 아니라 승인된 Terraform Role로 실행한다.
-- Bootstrap Role은 State와 `doro-erp-prod-*` IAM 범위만 가진다. VPC·EKS 등 AWS 서비스 권한은 Foundation 구현과 함께 필요한 Action만 별도 정책으로 추가한다.
+- Terraform Role은 후속 AWS 자원과 프로젝트 IAM 범위를 관리하며, EKS Node Group·ElastiCache·Auto Scaling·CloudFront VPC Origin 등에 필요한 Service-linked Role의 자동 생성도 허용한다.
 - State Lock을 강제로 해제하기 전에 실행 중인 다른 작업이 없는지 확인한다.
 - State Bucket은 `prevent_destroy`가 적용되어 일반 Destroy로 삭제되지 않는다.
 - Access Key, Secret, Session Token과 `.tfstate`를 Git에 추가하지 않는다.

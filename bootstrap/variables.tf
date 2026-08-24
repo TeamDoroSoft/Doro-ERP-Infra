@@ -33,31 +33,71 @@ variable "state_bucket_name" {
   }
 }
 
-variable "terraform_operator_principal_arns" {
-  description = "IAM principals allowed to assume the Terraform execution role."
-  type        = set(string)
-  default = [
-    "arn:aws:iam::727646470302:user/a-student-06",
-    "arn:aws:iam::727646470302:user/b-student-05"
-  ]
+variable "hosted_zone_name" {
+  description = "Existing registered domain whose Route 53 public hosted zone is managed by Bootstrap."
+  type        = string
+  default     = "minseok.click"
 
   validation {
-    condition = length(var.terraform_operator_principal_arns) > 0 && alltrue([
-      for arn in var.terraform_operator_principal_arns :
-      can(regex("^arn:aws:iam::727646470302:(user|role)/[A-Za-z0-9+=,.@_/-]+$", arn))
-    ])
-    error_message = "Every Terraform operator must be an IAM user or role ARN in account 727646470302."
+    condition     = can(regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$", var.hosted_zone_name))
+    error_message = "hosted_zone_name must be a valid registered DNS domain name."
   }
 }
 
-variable "github_oidc_provider_arn" {
-  description = "Existing GitHub Actions OIDC provider in the shared AWS account."
-  type        = string
-  default     = "arn:aws:iam::727646470302:oidc-provider/token.actions.githubusercontent.com"
+variable "terraform_operator_user_names" {
+  description = "Existing IAM users assigned exclusively to the Terraform operator group."
+  type        = set(string)
+  default = [
+    "a-student-02",
+    "a-student-06",
+    "b-student-05",
+    "b-student-11"
+  ]
+
+  validation {
+    condition = length(var.terraform_operator_user_names) > 0 && alltrue([
+      for name in var.terraform_operator_user_names :
+      can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", name))
+    ])
+    error_message = "Every Terraform operator must be a valid existing IAM user name."
+  }
+}
+
+variable "terraform_operator_additional_principal_arns" {
+  description = "Optional non-user IAM principals also allowed to assume the Terraform execution role."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for arn in var.terraform_operator_additional_principal_arns :
+      can(regex("^arn:aws:iam::727646470302:role/[A-Za-z0-9+=,.@_/-]+$", arn))
+    ])
+    error_message = "Every additional Terraform operator must be an IAM role ARN in account 727646470302."
+  }
 }
 
 variable "ssm_operator_group_name" {
-  description = "Existing IAM group whose members may open audited Prod SSM sessions."
+  description = "Terraform-managed IAM group whose members may open audited Prod SSM sessions."
   type        = string
   default     = "team2-doro-load-group"
+}
+
+variable "ssm_operator_user_names" {
+  description = "Existing IAM users assigned exclusively to the Terraform-managed Prod SSM operator group."
+  type        = set(string)
+  default = [
+    "a-student-02",
+    "a-student-06",
+    "b-student-05",
+    "b-student-11"
+  ]
+
+  validation {
+    condition = length(var.ssm_operator_user_names) > 0 && alltrue([
+      for name in var.ssm_operator_user_names :
+      can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", name))
+    ])
+    error_message = "Every SSM operator must be a valid existing IAM user name."
+  }
 }

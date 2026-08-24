@@ -1,8 +1,8 @@
 # IAM 리소스 정리 및 Bootstrap State 협의사항
 
 > Prod 단일 환경 재구축에서는 `team2-doroload-ssm-access-policy`를 더 이상 재사용하지 않는다.
-> Bootstrap이 `doro-erp-prod-ssm-access` 정책과 기존 팀 운영자 Group 연결을 새로 관리하며,
-> 아래 내용은 기존 환경 조사 기록으로만 유지한다.
+> Bootstrap이 `team2-doro-load-group`, 정확한 4인 멤버십과 `doro-erp-prod-ssm-access`
+> 정책 연결을 모두 새로 관리하도록 변경됐다. 아래 내용은 기존 환경 조사 기록으로만 유지한다.
 
 xlsx(`Doro_Team2_IAM_정책설명포함.xlsx`) 분석하다가 Terraform으로 관리 안 되는 IAM 리소스들 발견해서 AWS CLI(profile: `team2`, 계정 `727646470302`)로 하나씩 실측 조사한 내용 정리. 담당자 확인/협의 필요한 부분 위주로 남김.
 
@@ -37,13 +37,16 @@ CloudTrail(us-east-1)로 확인:
 - trust policy(mutable/immutable subject 혼용)는 이번 범위에서 제외 — 안정화 후 별도 진행
 - **아직 apply 안 함** — [PR #16](https://github.com/TeamDoroSoft/Doro-ERP-Infra/pull/16)에 코드 반영, 리뷰 대기 중
 
-## 3. team2-doro-load-group — xlsx에 없던 신규 발견, 그룹은 관리 안 하기로 범위 축소
+## 3. team2-doro-load-group — 과거 조사 기록(현재 결정으로 대체됨)
 
 - 멤버 5명: `a-student-02`, `a-student-06`, `b-student-11`, `b-student-05`, `cld-team2-doro-github-action`
 - 관리형 정책 1개(`team2-doroload-ssm-access-policy`) + 인라인 정책 3개(`EKS-Direct-Console-Access`, `team2-doro-load-ecr-push-policy`, `team2-doro-load-s3-frontend-policy`) 확인
 - CloudTrail·리소스 존재 여부로 실사용 재확인한 결과: `team2-doro-load-ecr-push-policy`(대상 ECR repo 삭제됨), `team2-doro-load-s3-frontend-policy`(대상 S3 버킷 삭제됨), `EKS-Direct-Console-Access`(사용 이력 0건) 3개는 전부 죽은 권한. `team2-doroload-ssm-access-policy`만 실사용 확인(우연히 `Team=team2` 태그가 현재 프로젝트의 management EC2에도 걸림)
 
-**범위 축소 결정**: Group 전체(멤버십 포함)를 편입하지 않고, 실사용 확인된 `team2-doroload-ssm-access-policy` **정책 내용만** 관리. `aws_iam_group_membership`의 배타적 동작으로 인한 멤버 축출 리스크를 죽은 정책들 때문에 감수할 이유가 없다고 판단.
+**현재 결정**: AWS 재구축 시 IAM 사용자 네 명만 선행 자원으로 두고 Bootstrap이 Group 전체와
+정확한 멤버십을 관리한다. 멤버는 `a-student-02`, `a-student-06`, `b-student-05`,
+`b-student-11`이며 과거 GitHub Actions IAM User는 포함하지 않는다. 이 절의 기존 조사 내용은
+당시 상태를 설명할 뿐 현재 적용 기준이 아니다.
 
 진행 상황: `bootstrap/team2-doroload-ssm-access-policy.tf` import 완료, [PR #16](https://github.com/TeamDoroSoft/Doro-ERP-Infra/pull/16)에 반영.
 
