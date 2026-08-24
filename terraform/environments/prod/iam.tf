@@ -95,7 +95,7 @@ data "aws_iam_policy_document" "management_eks_admin" {
 }
 
 resource "aws_iam_role_policy" "management_eks_admin" {
-  name   = "DoroERPDevEKSAdminPolicy"
+  name   = "DoroERPProdEKSAdminPolicy"
   role   = aws_iam_role.management_instance.name
   policy = data.aws_iam_policy_document.management_eks_admin.json
 }

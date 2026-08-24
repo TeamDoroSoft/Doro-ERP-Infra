@@ -64,7 +64,7 @@ resource "aws_launch_template" "eks_node" {
   update_default_version = true
 
   block_device_mappings {
-    device_name = "/prod/xvda"
+    device_name = "/dev/xvda"
 
     ebs {
       delete_on_termination = true
@@ -103,7 +103,7 @@ resource "aws_eks_node_group" "alpha" {
   node_role_arn          = aws_iam_role.eks_node.arn
   # Prod workloads intentionally stay in AZ-a. The EKS control plane and ALB
   # continue to use both application subnets, but worker capacity scales only
-  # inside the lower-cost single-AZ development failure domain.
+  # inside the lower-cost single-AZ project failure domain.
   subnet_ids = [data.aws_subnet.app_a.id]
 
   ami_type       = "AL2023_x86_64_STANDARD"
