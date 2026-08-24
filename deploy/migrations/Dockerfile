@@ -1,8 +1,0 @@
-ARG FLYWAY_VERSION=12.4.0
-FROM redgate/flyway:${FLYWAY_VERSION}
-
-ARG MIGRATION_SOURCE
-COPY ${MIGRATION_SOURCE}/ /flyway/sql/
-
-ENTRYPOINT ["flyway"]
-CMD ["migrate"]

@@ -340,7 +340,7 @@ Terraform은 AWS 기반 자원을 관리하고 Argo CD는 Kubernetes 자원을 �
 Argo CD는 Prod 인프라의 Bootstrap·Foundation·Data 자원 생성에 필요한 선행 구성요소가 아니다. EKS, ECR, RDS, SQS, Pod Identity와 Application Manifest가 각각 정상 동작하는지 먼저 검증한 뒤 배포 자동화 단계에서 도입한다.
 
 - Argo CD 도입 전에도 Kubernetes Manifest의 정본은 Git의 Kustomize Base와 Prod Alpha Overlay다.
-- 초기 배포는 `kubectl apply -k deploy/overlays/prod/alpha`처럼 승인된 Overlay 단위로 수행한다.
+- 초기 배포는 `Doro-ERP-GitOps`에서 `kubectl apply -k deploy/overlays/prod/alpha`처럼 승인된 Overlay 단위로 수행한다.
 - `kubectl edit`, AWS Console 또는 임시 `kubectl set image`로 만든 변경을 Git에 반영하지 않은 채 유지하지 않는다.
 - Argo CD 도입을 이유로 Deployment·Service·Ingress를 Terraform 관리 대상으로 옮기지 않는다.
 - Argo CD 도입 후에는 Git을 통하지 않은 Cluster 변경을 Drift로 탐지하고 Git의 목표 상태로 복구한다.
@@ -349,8 +349,8 @@ Argo CD는 Prod 인프라의 Bootstrap·Foundation·Data 자원 생성에 필요
 
 다음 조건을 모두 충족해야 Argo CD 설치와 Repository 연결을 시작할 수 있다.
 
-- `deploy/base`에 Edge를 포함한 여섯 서비스의 Deployment·Service와 필요한 공통 Manifest가 존재한다.
-- `deploy/overlays/prod/alpha`를 `kustomize build` 또는 `kubectl kustomize`로 오류 없이 렌더링할 수 있다.
+- `Doro-ERP-GitOps/deploy/base`에 Edge를 포함한 여섯 서비스의 Deployment·Service와 필요한 공통 Manifest가 존재한다.
+- `Doro-ERP-GitOps/deploy/overlays/prod/alpha`를 `kustomize build` 또는 `kubectl kustomize`로 오류 없이 렌더링할 수 있다.
 - 여섯 Application Image가 ECR에 Git SHA 또는 Image Digest로 존재하며 EKS에서 Pull할 수 있다.
 - 승인된 Prod Alpha Overlay의 수동 적용과 재적용이 성공한다.
 - 여섯 Application의 Startup·Readiness·Liveness Probe와 기본 Smoke Test가 통과한다.
@@ -411,7 +411,7 @@ Prod 자동 Sync의 목표 정책은 `selfHeal=true`, `prune=true`다. 다만 �
 
 ### 5단계: Application 수동 통합 배포
 
-- 서비스별 Kustomize Base와 Prod Alpha Overlay
+- `Doro-ERP-GitOps`가 소유하는 서비스별 Kustomize Base와 Prod Alpha Overlay
 - ECR Image Pull, Migration Job과 Secret 주입
 - `kubectl apply -k` 재적용, Health Check와 Smoke Test
 - 여섯 Application의 독립 배포와 Resource 사용량 검증
