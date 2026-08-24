@@ -44,6 +44,20 @@ variable "hosted_zone_name" {
   }
 }
 
+variable "github_oidc_provider_arn" {
+  description = "Existing account-shared GitHub Actions OIDC provider ARN, read without Terraform ownership."
+  type        = string
+  default     = "arn:aws:iam::727646470302:oidc-provider/token.actions.githubusercontent.com"
+
+  validation {
+    condition = (
+      var.github_oidc_provider_arn ==
+      "arn:aws:iam::${var.aws_account_id}:oidc-provider/token.actions.githubusercontent.com"
+    )
+    error_message = "github_oidc_provider_arn must reference the GitHub Actions OIDC provider in aws_account_id."
+  }
+}
+
 variable "terraform_operator_user_names" {
   description = "Existing IAM users assigned exclusively to the Terraform operator group."
   type        = set(string)

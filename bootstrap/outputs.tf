@@ -59,6 +59,6 @@ output "prod_ssm_operator_user_names" {
 }
 
 output "github_actions_oidc_provider_arn" {
-  description = "Terraform-managed GitHub Actions OIDC provider ARN."
-  value       = aws_iam_openid_connect_provider.github.arn
+  description = "Existing account-shared GitHub Actions OIDC provider ARN read without ownership."
+  value       = data.aws_iam_openid_connect_provider.github.arn
 }

@@ -1,8 +1,9 @@
 # Terraform Bootstrap
 
 이 Stack은 Doro ERP Prod Terraform State Bucket, Route 53 Public Hosted Zone, 실행 IAM Role,
-GitHub Actions OIDC Provider, ECR Push Role과 Prod SSM 운영자 IAM Group을 생성한다. IAM 사용자
-자체와 등록된 `minseok.click` 도메인만 계정·등록기관 선행조건이며,
+ECR Push Role과 Prod SSM 운영자 IAM Group을 생성한다. IAM 사용자, 등록된 `minseok.click`
+도메인과 계정 공용 GitHub Actions OIDC Provider는 선행조건이며, OIDC Provider는 Data Source로
+조회만 하고 기존 태그·Thumbprint·Client ID를 변경하지 않는다.
 SSM Group의 멤버십은 `ssm_operator_user_names`의 정확한 목록으로 관리한다. ECR Push Role의
 신뢰 관계는 GitHub Organization ID `305760709`, Service Repository ID `1314731823`과
 `prod` Environment를 포함한 Subject로 제한한다.
@@ -11,7 +12,7 @@ SSM Group의 멤버십은 `ssm_operator_user_names`의 정확한 목록으로 �
 
 최초 실행에는 S3 Backend와 `doro-erp-prod-terraform` Role이 아직 없으므로 권한 있는 개인
 Source Profile(`erp-prod-source`)과 Local State로 실행한다. Source IAM 사용자는 이 Stack의
-S3·Route 53·IAM Group·Membership·Policy·Role·OIDC Provider를 생성할 권한이 있어야 한다. Terraform은
+S3·Route 53·IAM Group·Membership·Policy·Role 생성과 OIDC Provider 조회 권한이 있어야 한다. Terraform은
 실행 주체에게 없는 권한을 스스로 부여할 수 없다. `backend.s3.tf.example`은 이 단계에서
 `.tf` 확장자로 바꾸지 않는다.
 

@@ -17,7 +17,7 @@
 - 별도 AWS Prod Account를 만들지 않고 현재 사용하는 한 AWS Account에 구축한다.
 - `prod` 환경의 `alpha` Cell만 구축한다.
 - AWS 자원은 Terraform으로 관리한다.
-- 계정에 이미 존재하는 네 명의 IAM User는 재사용하되, 프로젝트 IAM Group·Role·Policy와 GitHub OIDC Provider는 Bootstrap Terraform이 생성한다.
+- 계정에 이미 존재하는 네 명의 IAM User와 계정 공용 GitHub OIDC Provider는 재사용하되, 프로젝트 IAM Group·Role·Policy는 Bootstrap Terraform이 생성한다. 공용 OIDC Provider는 Data Source로만 조회한다.
 - Kubernetes 자원의 선언은 Kustomize로 관리한다. 초기 통합 단계에서는 승인된 Overlay를 수동 적용하고, 도입 가능 기준을 충족한 뒤 Argo CD가 같은 선언을 GitOps 방식으로 동기화한다.
 - GitHub Actions가 테스트·이미지 빌드·ECR Push를 담당한다.
 - 별도 `dev` AWS 환경은 만들지 않고 Local·CI 검증을 통과한 Image만 이 환경에 배포한다.
@@ -182,7 +182,7 @@ Terraform을 직접 실행하는 팀원은 공유 Access Key를 사용하지 않
 - 현재 Bootstrap Principal: `arn:aws:iam::727646470302:user/b-student-05`
 - Trust Policy: 최초에는 현재 Bootstrap Principal만 Assume을 허용하고, Terraform을 직접 실행할 팀원이 생길 때 해당 Principal ARN을 추가
 - Permission Policy: 이 문서의 Prod 자원 생성·조회·변경·삭제 범위로 제한
-- GitHub Actions: Bootstrap이 `token.actions.githubusercontent.com` OIDC Provider와 프로젝트 전용 Role을 생성한다. 장기 Access Key를 사용하지 않으며 GitHub Organization ID `305760709`, Service Repository ID `1314731823`과 `prod` Environment를 포함한 Subject로 신원을 제한한다.
+- GitHub Actions: Bootstrap이 계정 공용 `token.actions.githubusercontent.com` OIDC Provider를 읽기 전용으로 재사용하고 프로젝트 전용 Role만 생성한다. 기존 Provider의 태그·Thumbprint·Client ID는 변경하지 않는다. 장기 Access Key를 사용하지 않으며 GitHub Organization ID `305760709`, Service Repository ID `1314731823`과 `prod` Environment를 포함한 Subject로 신원을 제한한다.
 - Terraform State: `doro-erp-prod-tfstate-727646470302-ap-northeast-2` S3 Bucket에 Versioning과 암호화를 적용하고 S3 Lockfile 사용
 - Credential, Secret 원문, `.env`는 Git과 Terraform 변수 기본값에 저장하지 않음
 

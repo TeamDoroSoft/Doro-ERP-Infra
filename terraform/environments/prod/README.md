@@ -301,8 +301,9 @@ repo:TeamDoroSoft@305760709/Doro-ERP-Service@1314731823:environment:prod
 `prod` Environment의 Deployment Branch Rule도 `main`으로 제한한다. Workflow 역시 다른 Branch에서는
 Publish Job을 실행하지 않는다.
 
-장기 Access Key를 GitHub Secret에 등록하지 않는다. Bootstrap Stack이 AWS Account의
-`token.actions.githubusercontent.com` OIDC Provider를 생성하고 ECR Publisher Role이 이를 참조한다.
+장기 Access Key를 GitHub Secret에 등록하지 않는다. Bootstrap Stack은 AWS Account에 이미 있는
+`token.actions.githubusercontent.com` 공용 OIDC Provider를 Data Source로 조회하고 ECR Publisher
+Role의 Trust Policy에서만 참조한다. 기존 Provider의 태그·Thumbprint·Client ID는 변경하지 않는다.
 GitHub Organization, Repository, Environment와 GitHub App은 AWS 밖의 선행조건이다.
 
 ## 10.1 중앙 Log와 최소 Alarm 확인
