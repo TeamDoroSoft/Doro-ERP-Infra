@@ -130,6 +130,13 @@ resource "aws_eks_node_group" "alpha" {
     cell        = "alpha"
   }
 
+  # Required for aws_iam_role.cluster_autoscaler's tag-scoped IAM condition
+  # to authorize scaling actions on this node group's underlying ASG.
+  tags = {
+    "k8s.io/cluster-autoscaler/enabled"              = "true"
+    "k8s.io/cluster-autoscaler/${local.name_prefix}" = "owned"
+  }
+
   lifecycle {
     create_before_destroy = true
 
