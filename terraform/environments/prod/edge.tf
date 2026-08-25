@@ -68,6 +68,36 @@ resource "aws_security_group" "alpha_alb_frontend" {
   }
 }
 
+# The AWS Load Balancer Controller creates and owns the Provider Admin ALB.
+# Terraform owns only the security group that GitOps must attach to it.
+resource "aws_security_group" "provider_admin_alb" {
+  name        = "${local.name_prefix}-provider-admin-alb"
+  description = "Provider Admin internal ALB: HTTPS only from the SSM management instance."
+  vpc_id      = data.aws_vpc.team2.id
+
+  tags = {
+    Name = "${local.name_prefix}-provider-admin-alb"
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "provider_admin_alb_from_management" {
+  security_group_id            = aws_security_group.provider_admin_alb.id
+  description                  = "HTTPS only from the Prod SSM management instance security group"
+  ip_protocol                  = "tcp"
+  from_port                    = 443
+  to_port                      = 443
+  referenced_security_group_id = aws_security_group.management.id
+}
+
+resource "aws_vpc_security_group_egress_rule" "provider_admin_alb_to_targets" {
+  security_group_id = aws_security_group.provider_admin_alb.id
+  description       = "HTTP to Provider Admin frontend and Edge Pod IP targets in the Prod VPC"
+  ip_protocol       = "tcp"
+  from_port         = 8080
+  to_port           = 8080
+  cidr_ipv4         = data.aws_vpc.team2.cidr_block
+}
+
 resource "aws_vpc_security_group_ingress_rule" "alpha_alb_from_cloudfront" {
   security_group_id = aws_security_group.alpha_alb_frontend.id
   description       = "HTTPS from the CloudFront origin-facing managed prefix list"
@@ -148,6 +178,15 @@ resource "aws_acm_certificate" "alpha_alb" {
   }
 }
 
+resource "aws_acm_certificate" "provider_admin_alb" {
+  domain_name       = var.provider_admin_domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 locals {
   edge_certificate_validation_options = merge(
     {
@@ -159,6 +198,13 @@ locals {
     },
     {
       for option in aws_acm_certificate.alpha_alb.domain_validation_options : option.domain_name => {
+        name   = option.resource_record_name
+        record = option.resource_record_value
+        type   = option.resource_record_type
+      }
+    },
+    {
+      for option in aws_acm_certificate.provider_admin_alb.domain_validation_options : option.domain_name => {
         name   = option.resource_record_name
         record = option.resource_record_value
         type   = option.resource_record_type
@@ -187,6 +233,11 @@ resource "aws_acm_certificate_validation" "frontend" {
 resource "aws_acm_certificate_validation" "alpha_alb" {
   certificate_arn         = aws_acm_certificate.alpha_alb.arn
   validation_record_fqdns = [aws_route53_record.certificate_validation[var.alb_origin_domain_name].fqdn]
+}
+
+resource "aws_acm_certificate_validation" "provider_admin_alb" {
+  certificate_arn         = aws_acm_certificate.provider_admin_alb.arn
+  validation_record_fqdns = [aws_route53_record.certificate_validation[var.provider_admin_domain_name].fqdn]
 }
 
 resource "aws_route53_record" "alpha_alb_origin" {

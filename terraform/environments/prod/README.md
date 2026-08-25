@@ -17,6 +17,7 @@
 - AWS Load Balancer Controller IAM Policy·Role과 Pod Identity Association
 - 비공개 Frontend S3, CloudFront, WAF, Viewer용 us-east-1 ACM, ALB용 Regional ACM, `doro.minseok.click`
 - Bootstrap이 만든 Public Route 53 Hosted Zone `minseok.click`에 Terraform이 관리하는 DNS Record
+- Provider Admin 전용 Pod Identity·OIDC/session 및 Edge-to-Store Access HMAC Secret Container, Internal ALB용 Security Group·Regional ACM과 고정 목적지 SSM Port Forwarding 문서
 
 Network, Redis와 MongoDB는 Foundation과 State 수명주기를 분리한다. [`network/`](network/README.md)를 먼저 Apply한 뒤 Foundation, [`redis/`](redis/README.md), [`mongodb-atlas/`](mongodb-atlas/README.md) 순서로 실행한다.
 
@@ -25,6 +26,46 @@ Security Group·Regional ACM 인증서를 만들고, AWS Load Balancer Controlle
 Manifest를 조정해 `doro-erp-prod-alpha-gateway` Internal ALB를 생성한다. `/api/*` CloudFront
 VPC Origin은 `origin.doro.minseok.click`을 통해 이 ALB의 HTTPS 443 Listener에 연결한다.
 TLS는 ALB에서 종료되고 Edge Pod Target 구간은 HTTP다.
+
+## Provider Admin private access contract
+
+Provider Admin ALB·Ingress·IngressGroup·Namespace와 NetworkPolicy는 GitOps가 소유한다. 이
+Foundation State는 ALB를 직접 만들거나 `admin.doro.minseok.click`의 Public Route 53 Alias를
+만들지 않는다. GitOps는 전용 internal ALB에 아래 Output 계약을 적용해야 한다.
+
+| Contract | Terraform ownership | GitOps requirement |
+|---|---|---|
+| Namespace and Edge identity | `doro-provider-admin`, ServiceAccount `provider-admin-edge-api`, dedicated Pod Identity role | Admin Edge Deployment only uses this ServiceAccount. Public Edge continues to use `doro-alpha/edge-api`. |
+| Secret containers | `doro-erp/prod/alpha/provider-admin-edge` and `doro-erp/prod/alpha/hmac/edge-to-store-access-admin` | Admin OIDC/session values mount only into Admin Edge; Admin HMAC mounts only into Admin Edge and Store Access. Public Edge gets neither. |
+| ALB network boundary | `provider_admin_alb_security_group_id` | Attach it only to the Admin internal ALB. Its only inbound rule is the management EC2 security group to TCP/443. |
+| TLS and browser name | `provider_admin_alb_certificate_arn`, `provider_admin_alb_hostname` | Attach the Regional certificate to the HTTPS listener and route Host `admin.doro.minseok.click`; do not add it to the public Gateway/CloudFront origin or publish a public Alias. |
+
+Keep `provider_admin_remote_host=null` for the first Foundation Apply so Terraform can create the
+Admin ALB Security Group, Certificate and workload identity before the GitOps-owned ALB exists.
+After that ALB is programmed, set the variable to its exact private ELBv2 DNS name (without scheme
+or port) and apply the Foundation again. Only this second Apply creates the SSM document. Terraform
+embeds that host, remote port `443`, and local port `8443` into
+`doro-erp-prod-provider-admin-port-forwarding`; callers cannot change them. This prevents the SSM
+document from becoming a general remote-host proxy and preserves the exact OIDC redirect contract.
+Before starting the session, verify local port `8443` is unused. Map
+`admin.doro.minseok.click` to `127.0.0.1` in the operator's local hosts resolver for the duration of
+the tunnel so the browser sends the certificate Host/SNI while SSM forwards to the private ALB DNS.
+The expected Admin origin is `https://admin.doro.minseok.click:8443` and the exact callback is
+`https://admin.doro.minseok.click:8443/api/v1/provider/auth/callback`.
+
+```bash
+ss -ltn "sport = :8443"
+aws ssm start-session \
+  --target "$(terraform output -raw management_instance_id)" \
+  --region ap-northeast-2 \
+  --document-name "$(terraform output -raw provider_admin_port_forwarding_document_name)" \
+  --parameters "localPortNumber=8443"
+```
+
+The SSM operator policy permits this custom document only with the `doro-erp-prod-management`
+instance. Keep the normal session document separately for audited shell work. Verify after rollout
+that a public CloudFront URL, shared Gateway ALB, and a public Edge Pod cannot serve
+`/api/v1/provider/**`; then verify that the local tunnel reaches only the Admin ALB.
 
 순환 의존성을 피하기 위해 `enable_gateway_backend=false`인 Foundation Apply와 Gateway ALB
 생성 후 `enable_gateway_backend=true`인 Backend Origin Apply를 분리한다. 첫 단계에서는
