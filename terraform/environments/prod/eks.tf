@@ -6,7 +6,7 @@ resource "aws_cloudwatch_log_group" "eks" {
 resource "aws_eks_cluster" "this" {
   name     = local.name_prefix
   role_arn = aws_iam_role.eks_cluster.arn
-  version  = "1.35"
+  version  = "1.36"
 
   access_config {
     authentication_mode                         = "API"

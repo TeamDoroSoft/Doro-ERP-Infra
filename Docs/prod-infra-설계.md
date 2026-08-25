@@ -33,7 +33,7 @@
 | Environment / Cell | `prod` / `alpha` |
 | Network | Terraform 관리형 Prod VPC(`10.24.0.0/16`), IGW 1개, NAT 1개, Public·Application·Data Subnet 각 2개 |
 | Availability Zones | az-a = `ap-northeast-2a`(`apne2-az1`), az-b = `ap-northeast-2c`(`apne2-az3`) |
-| Compute | EKS `1.35`, 관리형 Node Group `t3.large` 최소 2대·최대 4대, Root Volume `gp3` 50 GiB, AZ-a 배치 |
+| Compute | EKS `1.36`, 관리형 Node Group `t3.large` 최소 2대·최대 4대, Root Volume `gp3` 50 GiB, AZ-a 배치 |
 | Application | 서비스별 최소 Replica 2개, HPA 최대 4개, PDB 적용 |
 | API Routing | AWS Load Balancer Controller Gateway API, Edge HTTPRoute, 내부 ALB 1개 |
 | PostgreSQL | RDS for PostgreSQL `17.10`, `db.t4g.small`, `gp3` 20 GiB, Single-AZ Instance 1개, 서비스별 Database 4개 |
@@ -131,7 +131,7 @@ Frontend S3와 Terraform Backend S3는 Network State에 포함하지 않는다. 
 
 - EKS Cluster Subnet: `private-app-a`, `private-app-c`
 - 관리형 Node Group Subnet: `private-app-a`만 사용
-- Kubernetes Version: `1.35`
+- Kubernetes Version: `1.36`
 - Node Instance: `t3.large`, Root Volume `gp3` 50 GiB
 - Node 수: Desired/Min/Max를 `2/2/4`로 구성하고 Cluster Autoscaler가 Desired를 조정
 - Cell Namespace: `doro-alpha`
