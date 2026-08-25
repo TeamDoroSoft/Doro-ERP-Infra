@@ -4,7 +4,7 @@
 
 ## 생성 범위
 
-- EKS 1.35, AZ-a의 `t3.large` Managed Node 최소 2개·최대 4개, EKS Access Entry
+- EKS 1.36, AZ-a의 `t3.large` Managed Node 최소 2개·최대 4개, EKS Access Entry
 - EKS Worker Node SSM과 Public IP·Inbound Rule이 없는 Private `t4g.micro` 관리 EC2
 - CloudWatch에 기록되는 관리 SSM Shell, 20분 Idle Timeout과 60분 최대 Session
 - 6개 ECR Repository
@@ -134,12 +134,24 @@ Internet Gateway와 NAT Gateway가 각각 한 개이고 S3 삭제가 없는지 �
 
 ```bash
 cd ~/Doro-ERP-Infra/terraform/environments/prod
-cp terraform.tfvars.example terraform.tfvars
 curl -fsS https://checkip.amazonaws.com
+```
+
+신규 환경에서만 `cp terraform.tfvars.example terraform.tfvars`로 시작한다. 기존 환경에서는 예제
+CIDR로 운영값을 덮어쓰지 말고, 먼저 현재 EKS Public Access CIDR을 확인한다.
+
+```bash
+aws eks describe-cluster \
+  --name doro-erp-prod \
+  --region ap-northeast-2 \
+  --query 'cluster.resourcesVpcConfig.publicAccessCidrs' \
+  --output json
 nano terraform.tfvars
 ```
 
-`eks_public_access_cidrs`의 예제 IP를 출력된 IP의 `/32`로 바꾼다. `0.0.0.0/0`은 검증 단계에서 거절된다.
+IAM처럼 EKS API 접근 변경이 목적이 아닌 Apply에서는 조회된 운영 CIDR을
+`eks_public_access_cidrs`에 그대로 유지한다. 접근 경계를 변경하는 승인된 작업에서만 현재
+CloudShell Public IP의 `/32`로 바꾼다. `0.0.0.0/0`은 검증 단계에서 거절된다.
 
 ## 4.1 Gateway API와 Backend Origin 적용 순서
 
