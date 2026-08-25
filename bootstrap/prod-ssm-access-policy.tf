@@ -1,9 +1,15 @@
-# Prod operators use an audited Session Manager shell only. The existing IAM
-# group and membership remain account prerequisites; this Stack owns the
-# project policy and its attachment to that group.
+# Prod operators use an audited Session Manager shell only. IAM users remain
+# account prerequisites; this Stack owns the group, its exact membership, the
+# project policy and the policy attachment.
 
-data "aws_iam_group" "team2_operators" {
-  group_name = var.ssm_operator_group_name
+resource "aws_iam_group" "team2_operators" {
+  name = var.ssm_operator_group_name
+}
+
+resource "aws_iam_group_membership" "team2_operators" {
+  name  = "${var.ssm_operator_group_name}-membership"
+  group = aws_iam_group.team2_operators.name
+  users = sort(tolist(var.ssm_operator_user_names))
 }
 
 data "aws_iam_policy_document" "prod_ssm_access" {
@@ -62,6 +68,6 @@ resource "aws_iam_policy" "prod_ssm_access" {
 }
 
 resource "aws_iam_group_policy_attachment" "prod_ssm_access" {
-  group      = data.aws_iam_group.team2_operators.group_name
+  group      = aws_iam_group.team2_operators.name
   policy_arn = aws_iam_policy.prod_ssm_access.arn
 }

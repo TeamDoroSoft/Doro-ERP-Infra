@@ -1,24 +1,41 @@
 \set ON_ERROR_STOP on
 
 -- Run once from the SSM management instance while connected as doro_admin.
--- Password values are prompted by psql and are never stored in this file.
-\prompt 'store_access runtime password: ' store_access_runtime_password
-\prompt 'store_access migration password: ' store_access_migration_password
-\prompt 'commerce runtime password: ' commerce_runtime_password
-\prompt 'commerce migration password: ' commerce_migration_password
-\prompt 'payment runtime password: ' payment_runtime_password
-\prompt 'payment migration password: ' payment_migration_password
-\prompt 'queue runtime password: ' queue_runtime_password
-\prompt 'queue migration password: ' queue_migration_password
+-- \password disables terminal echo, so credential values are not included in
+-- the audited SSM session stream or stored in this file.
+CREATE ROLE store_access_runtime LOGIN;
+CREATE ROLE store_access_migration LOGIN;
+CREATE ROLE commerce_runtime LOGIN;
+CREATE ROLE commerce_migration LOGIN;
+CREATE ROLE payment_runtime LOGIN;
+CREATE ROLE payment_migration LOGIN;
+CREATE ROLE queue_runtime LOGIN;
+CREATE ROLE queue_migration LOGIN;
 
-CREATE ROLE store_access_runtime LOGIN PASSWORD :'store_access_runtime_password';
-CREATE ROLE store_access_migration LOGIN PASSWORD :'store_access_migration_password';
-CREATE ROLE commerce_runtime LOGIN PASSWORD :'commerce_runtime_password';
-CREATE ROLE commerce_migration LOGIN PASSWORD :'commerce_migration_password';
-CREATE ROLE payment_runtime LOGIN PASSWORD :'payment_runtime_password';
-CREATE ROLE payment_migration LOGIN PASSWORD :'payment_migration_password';
-CREATE ROLE queue_runtime LOGIN PASSWORD :'queue_runtime_password';
-CREATE ROLE queue_migration LOGIN PASSWORD :'queue_migration_password';
+\echo 'Set password for store_access_runtime'
+\password store_access_runtime
+\echo 'Set password for store_access_migration'
+\password store_access_migration
+\echo 'Set password for commerce_runtime'
+\password commerce_runtime
+\echo 'Set password for commerce_migration'
+\password commerce_migration
+\echo 'Set password for payment_runtime'
+\password payment_runtime
+\echo 'Set password for payment_migration'
+\password payment_migration
+\echo 'Set password for queue_runtime'
+\password queue_runtime
+\echo 'Set password for queue_migration'
+\password queue_migration
+
+-- RDS administrators are not PostgreSQL superusers. Temporary membership is
+-- required to assign database ownership and alter the owner's default
+-- privileges. It is revoked after the bootstrap is complete.
+GRANT store_access_migration TO doro_admin;
+GRANT commerce_migration TO doro_admin;
+GRANT payment_migration TO doro_admin;
+GRANT queue_migration TO doro_admin;
 
 CREATE DATABASE store_access_db OWNER store_access_migration;
 CREATE DATABASE commerce_db OWNER commerce_migration;
@@ -62,3 +79,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE queue_migration IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO queue_runtime;
 ALTER DEFAULT PRIVILEGES FOR ROLE queue_migration IN SCHEMA public
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO queue_runtime;
+
+REVOKE store_access_migration FROM doro_admin;
+REVOKE commerce_migration FROM doro_admin;
+REVOKE payment_migration FROM doro_admin;
+REVOKE queue_migration FROM doro_admin;

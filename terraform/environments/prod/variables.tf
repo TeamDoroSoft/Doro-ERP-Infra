@@ -22,6 +22,18 @@ variable "network_state_key" {
   default     = "environments/prod/network/terraform.tfstate"
 }
 
+variable "bootstrap_state_bucket" {
+  description = "S3 backend bucket containing the Terraform-managed Prod bootstrap state."
+  type        = string
+  default     = "doro-erp-prod-tfstate-727646470302-ap-northeast-2"
+}
+
+variable "bootstrap_state_key" {
+  description = "S3 key of the Terraform-managed Prod bootstrap state."
+  type        = string
+  default     = "bootstrap/terraform.tfstate"
+}
+
 variable "eks_public_access_cidrs" {
   description = "Fixed public /32 CIDRs allowed to reach the EKS API. Set this in terraform.tfvars before plan."
   type        = list(string)
@@ -58,7 +70,7 @@ variable "alb_origin_domain_name" {
 }
 
 variable "hosted_zone_name" {
-  description = "Existing Route 53 public hosted zone."
+  description = "Route 53 public hosted zone created and managed by this Prod stack."
   type        = string
   default     = "minseok.click"
 }

@@ -10,6 +10,16 @@ data "terraform_remote_state" "network" {
   }
 }
 
+data "terraform_remote_state" "bootstrap" {
+  backend = "s3"
+
+  config = {
+    bucket = var.bootstrap_state_bucket
+    key    = var.bootstrap_state_key
+    region = var.aws_region
+  }
+}
+
 data "aws_eks_addon_version" "vpc_cni" {
   addon_name         = "vpc-cni"
   kubernetes_version = aws_eks_cluster.this.version
@@ -64,11 +74,6 @@ data "aws_route_table" "private_data" {
   route_table_id = local.network.route_table_ids.data
 }
 
-data "aws_route53_zone" "public" {
-  name         = "${var.hosted_zone_name}."
-  private_zone = false
-}
-
 data "aws_lb" "gateway" {
   count = var.enable_gateway_backend ? 1 : 0
 
@@ -111,6 +116,20 @@ resource "terraform_data" "network_contract" {
         data.aws_subnet.data_c.vpc_id == data.aws_vpc.team2.id
       ])
       error_message = "At least one configured subnet is no longer part of the team2 VPC."
+    }
+  }
+}
+
+resource "terraform_data" "bootstrap_contract" {
+  input = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_id
+
+  lifecycle {
+    precondition {
+      condition = (
+        data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_name ==
+        var.hosted_zone_name
+      )
+      error_message = "The Bootstrap-managed public hosted zone does not match hosted_zone_name."
     }
   }
 }

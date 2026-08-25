@@ -170,7 +170,7 @@ locals {
 resource "aws_route53_record" "certificate_validation" {
   for_each = local.edge_certificate_validation_options
 
-  zone_id = data.aws_route53_zone.public.zone_id
+  zone_id = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_id
   name    = each.value.name
   type    = each.value.type
   records = [each.value.record]
@@ -192,7 +192,7 @@ resource "aws_acm_certificate_validation" "alpha_alb" {
 resource "aws_route53_record" "alpha_alb_origin" {
   count = var.enable_gateway_backend ? 1 : 0
 
-  zone_id = data.aws_route53_zone.public.zone_id
+  zone_id = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_id
   name    = var.alb_origin_domain_name
   type    = "A"
 
@@ -359,7 +359,7 @@ resource "aws_s3_bucket_policy" "frontend" {
 }
 
 resource "aws_route53_record" "frontend" {
-  zone_id = data.aws_route53_zone.public.zone_id
+  zone_id = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_id
   name    = var.domain_name
   type    = "A"
 

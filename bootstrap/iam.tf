@@ -27,7 +27,7 @@ data "aws_iam_policy_document" "terraform_assume_role" {
 
     principals {
       type        = "AWS"
-      identifiers = sort(tolist(var.terraform_operator_principal_arns))
+      identifiers = sort(tolist(local.terraform_operator_principal_arns))
     }
 
     condition {
@@ -43,6 +43,36 @@ resource "aws_iam_role" "terraform_execution" {
   description          = "Terraform execution role for the Doro ERP prod environment."
   assume_role_policy   = data.aws_iam_policy_document.terraform_assume_role.json
   max_session_duration = 3600
+}
+
+resource "aws_iam_group" "terraform_operators" {
+  name = "doro-erp-prod-terraform-operators"
+}
+
+resource "aws_iam_group_membership" "terraform_operators" {
+  name  = "doro-erp-prod-terraform-operators-membership"
+  group = aws_iam_group.terraform_operators.name
+  users = sort(tolist(var.terraform_operator_user_names))
+}
+
+data "aws_iam_policy_document" "terraform_operator_assume" {
+  statement {
+    sid       = "AssumeDoroErpProdTerraformRole"
+    effect    = "Allow"
+    actions   = ["sts:AssumeRole"]
+    resources = [aws_iam_role.terraform_execution.arn]
+  }
+}
+
+resource "aws_iam_policy" "terraform_operator_assume" {
+  name        = "doro-erp-prod-terraform-assume"
+  description = "Allows approved Doro ERP Prod operators to assume the Terraform execution role."
+  policy      = data.aws_iam_policy_document.terraform_operator_assume.json
+}
+
+resource "aws_iam_group_policy_attachment" "terraform_operator_assume" {
+  group      = aws_iam_group.terraform_operators.name
+  policy_arn = aws_iam_policy.terraform_operator_assume.arn
 }
 
 data "aws_iam_policy_document" "terraform_iam_management" {
@@ -162,8 +192,8 @@ data "aws_iam_policy_document" "terraform_iam_management" {
     resources = [local.project_policy_arn_pattern]
   }
 
-  # The operator group itself remains an account prerequisite. Bootstrap owns
-  # the Prod SSM policy and its attachment to that group.
+  # Bootstrap owns the operator group, its membership, the Prod SSM policy and
+  # the attachment. IAM users themselves remain account prerequisites.
   statement {
     sid    = "ManageProdSsmAccessPolicy"
     effect = "Allow"
@@ -187,7 +217,7 @@ data "aws_iam_policy_document" "terraform_iam_management" {
       "iam:DetachGroupPolicy",
       "iam:ListAttachedGroupPolicies"
     ]
-    resources = [data.aws_iam_group.team2_operators.arn]
+    resources = [aws_iam_group.team2_operators.arn]
   }
 
   # doro-erp-service-ecr-publisher is the canonical GitHub Actions role for
@@ -296,9 +326,20 @@ data "aws_iam_policy_document" "terraform_service_linked_roles" {
     actions = ["iam:CreateServiceLinkedRole"]
     resources = [
       "arn:aws:iam::*:role/aws-service-role/eks.amazonaws.com/*",
+      "arn:aws:iam::*:role/aws-service-role/eks-nodegroup.amazonaws.com/*",
       "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*",
-      "arn:aws:iam::*:role/aws-service-role/rds.amazonaws.com/*"
+      "arn:aws:iam::*:role/aws-service-role/rds.amazonaws.com/*",
+      "arn:aws:iam::*:role/aws-service-role/elasticache.amazonaws.com/*",
+      "arn:aws:iam::*:role/aws-service-role/autoscaling.amazonaws.com/*",
+      "arn:aws:iam::*:role/aws-service-role/vpcorigin.cloudfront.amazonaws.com/*"
     ]
+  }
+
+  statement {
+    sid       = "ConfigureElastiCacheServiceLinkedRole"
+    effect    = "Allow"
+    actions   = ["iam:PutRolePolicy"]
+    resources = ["arn:aws:iam::*:role/aws-service-role/elasticache.amazonaws.com/AWSServiceRoleForElastiCache*"]
   }
 }
 

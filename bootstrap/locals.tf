@@ -14,6 +14,14 @@ locals {
   project_instance_profile_arn_pattern = "arn:aws:iam::${var.aws_account_id}:instance-profile/doro-erp-prod-*"
   workload_boundary_arn                = "arn:aws:iam::${var.aws_account_id}:policy/${local.workload_boundary_name}"
 
+  terraform_operator_principal_arns = setunion(
+    toset([
+      for name in var.terraform_operator_user_names :
+      "arn:aws:iam::${var.aws_account_id}:user/${name}"
+    ]),
+    var.terraform_operator_additional_principal_arns
+  )
+
   prod_ssm_access_policy_arn = "arn:aws:iam::${var.aws_account_id}:policy/doro-erp-prod-ssm-access"
 
   # Canonical GitHub Actions ECR push role. See

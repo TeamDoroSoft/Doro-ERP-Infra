@@ -118,9 +118,9 @@ ALB·ENI·Endpoint·NAT가 없는지 확인한 후 기존 VPC를 별도로 삭�
 7. 이 Network Stack, Foundation, Redis, Atlas 순서로 Apply한다.
 8. Gateway API와 Application을 배포한다.
 
-삭제 범위는 Doro ERP 기존 환경이 소유한 자원이다. Terraform 실행에 필요한 개인 IAM
-Principal과 팀 운영자 Group, 계정 공용 GitHub OIDC Provider, `minseok.click` Hosted Zone과
-Domain 등록은 새 Prod Stack의 외부 선행조건이므로 삭제하지 않는다.
+삭제 범위는 Doro ERP 기존 환경이 소유한 자원이다. Terraform 실행에 필요한 개인 IAM User,
+`minseok.click` Domain 등록과 계정 공용 GitHub OIDC Provider는 외부 선행조건이다. 팀 운영자
+Group과 Route 53 Hosted Zone은 새 Bootstrap State가 생성·관리하므로 Network 전환 중 삭제하지 않는다.
 
 새 Network State가 아직 없을 때 Foundation·Redis·Atlas의 새 Revision을 Plan하면 Remote
 State를 읽을 수 없어 실패한다. 반드시 Network Apply를 먼저 완료한다.
