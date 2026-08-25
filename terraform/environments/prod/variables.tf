@@ -75,6 +75,32 @@ variable "hosted_zone_name" {
   default     = "minseok.click"
 }
 
+variable "provider_admin_domain_name" {
+  description = "Browser Host/SNI for the private Provider Admin ALB. Terraform creates only its ACM validation record, never a public ALB alias."
+  type        = string
+  default     = "admin.doro.minseok.click"
+
+  validation {
+    condition     = var.provider_admin_domain_name == "admin.doro.minseok.click" && endswith(var.provider_admin_domain_name, ".${var.hosted_zone_name}")
+    error_message = "provider_admin_domain_name is fixed to admin.doro.minseok.click beneath the managed hosted zone."
+  }
+}
+
+variable "provider_admin_remote_host" {
+  description = "Exact private DNS name of the GitOps-created Provider Admin internal ALB. It is embedded in the SSM port-forwarding document and must be supplied after the ALB exists."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = var.provider_admin_remote_host == null || can(regex(
+      "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$",
+      var.provider_admin_remote_host
+    ))
+    error_message = "provider_admin_remote_host must be a lowercase fully qualified private ALB DNS name without a scheme or port."
+  }
+}
+
 variable "enable_gateway_backend" {
   description = "Explicitly enable the CloudFront VPC origin, origin DNS, and ALB alarms only after the Gateway API ALB exists."
   type        = bool

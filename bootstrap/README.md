@@ -67,7 +67,7 @@ terraform plan
 
 - `doro-erp-prod-terraform-operators` Group과 AssumeRole 정책도 Bootstrap이 생성하며 기본 멤버는 `a-student-02`, `a-student-06`, `b-student-05`, `b-student-11`이다.
 - 승인된 `terraform_operator_user_names`와 `terraform_operator_additional_principal_arns`만 Terraform Role을 Assume한다.
-- `team2-doro-load-group`은 Terraform이 생성하며 기본 멤버는 `a-student-02`, `a-student-06`, `b-student-05`, `b-student-11`이다.
+- `team2-doro-load-group`은 Terraform이 생성하며 기본 멤버는 `a-student-02`, `a-student-06`, `b-student-05`, `b-student-11`이다. 이 Group의 정책은 기존 감사 Shell 문서와, Foundation이 만드는 `doro-erp-prod-provider-admin-port-forwarding` Custom Session 문서만 사용하도록 제한한다. 후자는 `Name=doro-erp-prod-management` EC2만 Target으로 허용하며 원격 Host·443은 문서 본문에 고정된다.
 - `aws_iam_group_membership`은 목록 전체를 배타적으로 관리하므로 Console에서 임의로 추가한 멤버는 다음 Apply에서 제거될 수 있다.
 - IAM 사용자 생성과 Login Profile·Access Key 관리는 이 Stack 범위가 아니다.
 - Terraform 실행 Role은 자기 IAM 정책과 Trust Policy를 변경할 수 없다. Bootstrap IAM 변경은 승인된 개인 Source Principal로만 Plan·Apply한다.

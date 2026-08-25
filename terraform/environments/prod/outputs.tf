@@ -68,6 +68,31 @@ output "internal_hmac_secret_arns" {
   value       = { for name, secret in aws_secretsmanager_secret.internal_hmac : name => secret.arn }
 }
 
+output "provider_admin_edge_secret_arn" {
+  description = "Empty Provider Admin Edge OIDC/session Secret container to populate outside Terraform."
+  value       = aws_secretsmanager_secret.provider_admin_edge.arn
+}
+
+output "provider_admin_hmac_secret_arn" {
+  description = "Empty Provider Admin Edge-to-Store Access HMAC Secret container to populate outside Terraform."
+  value       = aws_secretsmanager_secret.provider_admin_hmac.arn
+}
+
+output "provider_admin_edge_role_arn" {
+  description = "Pod Identity IAM role for doro-provider-admin/provider-admin-edge-api only."
+  value       = aws_iam_role.provider_admin_edge.arn
+}
+
+output "provider_admin_namespace" {
+  description = "GitOps namespace contract for the Provider Admin frontend and dedicated Edge deployment."
+  value       = local.provider_admin_namespace
+}
+
+output "provider_admin_edge_service_account" {
+  description = "GitOps ServiceAccount name bound to the Provider Admin Edge Pod Identity role."
+  value       = local.provider_admin_service_account
+}
+
 output "ecr_repository_urls" {
   description = "Immutable ECR repositories for the six deployable applications."
   value       = { for name, repository in aws_ecr_repository.app : name => repository.repository_url }
@@ -141,6 +166,33 @@ output "gateway_backend_enabled" {
 output "alb_origin_certificate_arn" {
   description = "Regional ACM certificate discovered by the ALB Controller for its HTTPS listener."
   value       = aws_acm_certificate_validation.alpha_alb.certificate_arn
+}
+
+output "provider_admin_alb_certificate_arn" {
+  description = "Regional ACM certificate ARN that GitOps must attach to the Provider Admin internal ALB HTTPS listener."
+  value       = aws_acm_certificate_validation.provider_admin_alb.certificate_arn
+}
+
+output "provider_admin_alb_hostname" {
+  description = "Browser Host/SNI required by the Provider Admin internal ALB. No public Route 53 ALB alias is created."
+  value       = var.provider_admin_domain_name
+}
+
+output "provider_admin_alb_security_group_id" {
+  description = "Security group GitOps must attach to the Provider Admin internal ALB; ingress is management EC2 SG to TCP/443 only."
+  value       = aws_security_group.provider_admin_alb.id
+}
+
+output "provider_admin_port_forwarding_document_name" {
+  description = "Custom SSM Session document that fixes the Provider Admin remote host, TCP/443, and local TLS port 8443."
+  value       = try(aws_ssm_document.provider_admin_port_forwarding[0].name, null)
+}
+
+output "provider_admin_port_forwarding_command" {
+  description = "Start the fixed-destination Provider Admin tunnel on localhost:8443; browse with provider_admin_alb_hostname as Host/SNI."
+  value = var.provider_admin_remote_host == null ? null : (
+    "aws ssm start-session --target ${aws_instance.management.id} --region ${var.aws_region} --document-name ${aws_ssm_document.provider_admin_port_forwarding[0].name} --parameters localPortNumber=8443"
+  )
 }
 
 output "alb_origin_hostname" {

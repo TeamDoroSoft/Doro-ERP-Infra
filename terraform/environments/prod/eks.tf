@@ -225,6 +225,19 @@ resource "aws_eks_pod_identity_association" "workload" {
   ]
 }
 
+resource "aws_eks_pod_identity_association" "provider_admin_edge" {
+  cluster_name    = aws_eks_cluster.this.name
+  namespace       = local.provider_admin_namespace
+  service_account = local.provider_admin_service_account
+  role_arn        = aws_iam_role.provider_admin_edge.arn
+
+  depends_on = [
+    aws_eks_addon.pod_identity_agent,
+    aws_eks_addon.secrets_store_csi,
+    aws_iam_role_policy.provider_admin_edge
+  ]
+}
+
 resource "aws_eks_pod_identity_association" "migration" {
   for_each = local.migration_app_names
 

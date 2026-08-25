@@ -30,18 +30,20 @@ locals {
   ])
 
   hmac_directions = {
-    edge-to-store-access       = ["edge", "store-access"]
-    edge-to-store-access-admin = ["edge", "store-access"]
-    edge-to-audit              = ["edge", "audit"]
-    edge-to-payment            = ["edge", "payment"]
-    edge-to-commerce           = ["edge", "commerce"]
-    edge-to-queue              = ["edge", "queue"]
-    commerce-to-store-access   = ["commerce", "store-access"]
-    store-access-to-commerce   = ["store-access", "commerce"]
-    payment-to-commerce        = ["payment", "commerce"]
-    commerce-to-queue          = ["commerce", "queue"]
-    actor-context              = ["edge", "store-access", "commerce"]
+    edge-to-store-access     = ["edge", "store-access"]
+    edge-to-audit            = ["edge", "audit"]
+    edge-to-payment          = ["edge", "payment"]
+    edge-to-commerce         = ["edge", "commerce"]
+    edge-to-queue            = ["edge", "queue"]
+    commerce-to-store-access = ["commerce", "store-access"]
+    store-access-to-commerce = ["store-access", "commerce"]
+    payment-to-commerce      = ["payment", "commerce"]
+    commerce-to-queue        = ["commerce", "queue"]
+    actor-context            = ["edge", "store-access", "commerce"]
   }
+
+  provider_admin_namespace       = "doro-provider-admin"
+  provider_admin_service_account = "provider-admin-edge-api"
 
   queue_names = toset([
     "commerce-events",

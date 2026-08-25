@@ -14,3 +14,8 @@ cloudwatch_log_retention_days = 14
 # Keep false for the foundation apply. Set true only after the Gateway API ALB
 # doro-erp-prod-alpha-gateway exists and its Edge target is healthy.
 enable_gateway_backend = false
+
+# Leave null for the first Foundation Apply. After GitOps creates the dedicated
+# internal Provider Admin ALB, replace null with its exact private DNS name and
+# apply again to create the fixed-destination SSM forwarding document.
+provider_admin_remote_host = null
