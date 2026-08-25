@@ -88,6 +88,21 @@ output "frontend_url" {
   value       = "https://${var.domain_name}"
 }
 
+output "frontend_ecr_repository_url" {
+  description = "ECR repository URL for the Doro ERP frontend image."
+  value       = aws_ecr_repository.frontend.repository_url
+}
+
+output "frontend_publisher_role_arn" {
+  description = "GitHub Actions role for publishing the frontend image and static artifact."
+  value       = aws_iam_role.frontend_publisher.arn
+}
+
+output "frontend_cloudfront_distribution_id" {
+  description = "CloudFront distribution ID invalidated after publishing the frontend artifact."
+  value       = aws_cloudfront_distribution.frontend.id
+}
+
 output "route53_public_hosted_zone_id" {
   description = "Bootstrap-managed Route 53 public hosted zone ID."
   value       = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_id
