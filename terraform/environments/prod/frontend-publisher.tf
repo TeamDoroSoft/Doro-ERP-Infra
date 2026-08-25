@@ -25,36 +25,13 @@ data "aws_iam_policy_document" "frontend_publisher_assume" {
 
 resource "aws_iam_role" "frontend_publisher" {
   name                 = "${local.name_prefix}-frontend-publisher"
-  description          = "GitHub Actions role for publishing the Doro ERP frontend to ECR and S3."
+  description          = "GitHub Actions role for deploying the public Doro ERP frontend to S3 and CloudFront."
   assume_role_policy   = data.aws_iam_policy_document.frontend_publisher_assume.json
   permissions_boundary = local.workload_boundary_arn
   max_session_duration = 3600
 }
 
 data "aws_iam_policy_document" "frontend_publish" {
-  statement {
-    sid       = "EcrAuthorization"
-    effect    = "Allow"
-    actions   = ["ecr:GetAuthorizationToken"]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "PublishFrontendImage"
-    effect = "Allow"
-    actions = [
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:BatchGetImage",
-      "ecr:CompleteLayerUpload",
-      "ecr:DescribeImages",
-      "ecr:GetDownloadUrlForLayer",
-      "ecr:InitiateLayerUpload",
-      "ecr:PutImage",
-      "ecr:UploadLayerPart"
-    ]
-    resources = [aws_ecr_repository.frontend.arn]
-  }
-
   statement {
     sid    = "ReadFrontendBucketMetadata"
     effect = "Allow"
@@ -88,7 +65,46 @@ data "aws_iam_policy_document" "frontend_publish" {
 }
 
 resource "aws_iam_role_policy" "frontend_publish" {
-  name   = "DoroERPProdFrontendPublishPolicy"
+  name   = "DoroERPProdFrontendPublicPublishPolicy"
   role   = aws_iam_role.frontend_publisher.id
   policy = data.aws_iam_policy_document.frontend_publish.json
+}
+
+resource "aws_iam_role" "admin_ecr_publisher" {
+  name                 = "${local.name_prefix}-admin-ecr-publisher"
+  description          = "GitHub Actions role for publishing the Provider Admin image to its ECR repository."
+  assume_role_policy   = data.aws_iam_policy_document.frontend_publisher_assume.json
+  permissions_boundary = local.workload_boundary_arn
+  max_session_duration = 3600
+}
+
+data "aws_iam_policy_document" "admin_ecr_publish" {
+  statement {
+    sid       = "EcrAuthorization"
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "PublishProviderAdminImage"
+    effect = "Allow"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:BatchGetImage",
+      "ecr:CompleteLayerUpload",
+      "ecr:DescribeImages",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:InitiateLayerUpload",
+      "ecr:PutImage",
+      "ecr:UploadLayerPart"
+    ]
+    resources = [aws_ecr_repository.frontend.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "admin_ecr_publish" {
+  name   = "DoroERPProdAdminEcrPublishPolicy"
+  role   = aws_iam_role.admin_ecr_publisher.id
+  policy = data.aws_iam_policy_document.admin_ecr_publish.json
 }
