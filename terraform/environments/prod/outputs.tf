@@ -93,9 +93,24 @@ output "frontend_ecr_repository_url" {
   value       = aws_ecr_repository.frontend.repository_url
 }
 
+output "frontend_ecr_repository_name" {
+  description = "ECR repository name registered as the Front repository prod Environment variable FRONTEND_ECR_REPOSITORY."
+  value       = aws_ecr_repository.frontend.name
+}
+
 output "frontend_publisher_role_arn" {
-  description = "GitHub Actions role for publishing the frontend image and static artifact."
+  description = "Compatibility output for the public frontend S3 and CloudFront publisher role."
   value       = aws_iam_role.frontend_publisher.arn
+}
+
+output "frontend_public_publisher_role_arn" {
+  description = "GitHub Actions role registered as AWS_FRONTEND_DEPLOY_ROLE_ARN for public S3 and CloudFront deployment."
+  value       = aws_iam_role.frontend_publisher.arn
+}
+
+output "frontend_admin_ecr_publisher_role_arn" {
+  description = "GitHub Actions role registered as AWS_ADMIN_ECR_PUSH_ROLE_ARN for Provider Admin image publishing."
+  value       = aws_iam_role.admin_ecr_publisher.arn
 }
 
 output "frontend_cloudfront_distribution_id" {

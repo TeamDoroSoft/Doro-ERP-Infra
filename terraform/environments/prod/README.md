@@ -306,7 +306,35 @@ Publish Job을 실행하지 않는다.
 Role의 Trust Policy에서만 참조한다. 기존 Provider의 태그·Thumbprint·Client ID는 변경하지 않는다.
 GitHub Organization, Repository, Environment와 GitHub App은 AWS 밖의 선행조건이다.
 
-## 10.1 중앙 Log와 최소 Alarm 확인
+## 10.1 Front 게시 Workflow 연결
+
+Public Front와 Provider Admin은 `TeamDoroSoft/Doro-ERP-Front` 저장소의 `prod` Environment를
+공유하지만 AWS Role은 분리한다. Public Role은 S3 Object 배포와 CloudFront 무효화만 수행하고,
+Admin Role은 Provider Admin ECR Image 조회·Upload·Push만 수행한다.
+
+```bash
+terraform output -raw frontend_public_publisher_role_arn
+terraform output -raw frontend_admin_ecr_publisher_role_arn
+terraform output -raw frontend_bucket_name
+terraform output -raw frontend_cloudfront_distribution_id
+terraform output -raw frontend_ecr_repository_name
+```
+
+Front 저장소의 `prod` Environment Variable은 다음 Output과 연결한다.
+
+| GitHub Variable | Terraform Output | 권한 경계 |
+|---|---|---|
+| `AWS_FRONTEND_DEPLOY_ROLE_ARN` | `frontend_public_publisher_role_arn` | Public S3·CloudFront만 |
+| `AWS_ADMIN_ECR_PUSH_ROLE_ARN` | `frontend_admin_ecr_publisher_role_arn` | Provider Admin ECR만 |
+| `FRONTEND_S3_BUCKET` | `frontend_bucket_name` | Public Artifact Bucket 이름 |
+| `FRONTEND_CLOUDFRONT_DISTRIBUTION_ID` | `frontend_cloudfront_distribution_id` | Public Distribution ID |
+| `FRONTEND_ECR_REPOSITORY` | `frontend_ecr_repository_name` | ECR URL이 아닌 Repository 이름 |
+
+두 Role의 Trust Policy는 `repo:TeamDoroSoft/Doro-ERP-Front:environment:prod`만 허용한다. GitHub
+`prod` Environment의 Deployment Branch Rule도 `main`으로 제한하고, Service ECR Publisher Role을
+Front Workflow에 등록하지 않는다.
+
+## 10.2 중앙 Log와 최소 Alarm 확인
 
 CloudWatch Observability Add-on은 전용 `cloudwatch-agent` Pod Identity로 Container Log와
 Container Insights Metric을 전송한다. Application Signals 자동 계측은 아직 활성화하지 않아
