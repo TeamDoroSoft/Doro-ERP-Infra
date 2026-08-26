@@ -14,7 +14,7 @@ Manifest와 운영 목표 상태의 정본은 `Doro-ERP-GitOps` 저장소가 소
 
 - [Doro SaaS POS·Kiosk 제품·시스템 개요](../Docs/Doro_SaaS_POS_Kiosk.md)
 - [AWS EKS 셀 기반 인프라 설계](Docs/AWS_EKS_셀_기반_인프라_설계.md)
-- [ERP 기술 스택](<../Docs/의사결정/ERP 기술 스택.md>)
+- [ERP 기술 스택](<../Docs/매뉴얼/ERP 기술 스택.md>)
 - [개발 일정 WBS](<../Docs/의사결정/개발 일정 WBS.md>)
 - [MSA 서비스 컨텍스트](../Docs/Specifications/MSA/README.md)
 

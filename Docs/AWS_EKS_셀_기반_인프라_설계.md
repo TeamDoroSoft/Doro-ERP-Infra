@@ -26,7 +26,7 @@
 - [HTTP·인증 공통 계약](<../../Docs/Specifications/02 계정·역할·기기 인증/HTTP·인증 공통 계약.md>)
 - [Event 전송 공통 계약](<../../Docs/Specifications/07 대기열·호출·SQS/Event 전송 공통 계약.md>)
 - [서비스·계약 카탈로그](../../Docs/Specifications/README.md)
-- [기술 스택](<../../Docs/의사결정/ERP 기술 스택.md>)
+- [기술 스택](<../../Docs/매뉴얼/ERP 기술 스택.md>)
 
 AWS 배포 Topology·Cell 격리·Gateway API Routing·자원 소유권은 이 문서를 기준으로 한다. [Infra README](../README.md)는 현재 구현 상태와 실행·검증 진입점을 소유한다. 설계가 변경되면 두 문서를 같은 변경에서 맞춘다.
 
