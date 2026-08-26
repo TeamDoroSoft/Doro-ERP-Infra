@@ -11,8 +11,11 @@ data "aws_iam_policy_document" "frontend_publisher_assume" {
 
     condition {
       test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:aud"
-      values   = ["sts.amazonaws.com"]
+      variable = "token.actions.githubusercontent.com:sub"
+      values = [
+        "repo:TeamDoroSoft/Doro-ERP-Front:environment:prod",
+        "repo:TeamDoroSoft@305760709/Doro-ERP-Front@1314999807:environment:prod"
+      ]
     }
 
     condition {
