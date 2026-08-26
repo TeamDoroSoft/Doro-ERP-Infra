@@ -15,7 +15,7 @@
 - CloudWatch Observability Add-on, 14일 Container Log 보존과 Prod 운영 Alarm SNS Topic
 - Service GitHub Actions가 OIDC로 Assume하는 ECR Image Push 전용 Role
 - AWS Load Balancer Controller IAM Policy·Role과 Pod Identity Association
-- 비공개 Frontend S3, CloudFront, WAF, Viewer용 us-east-1 ACM, ALB용 Regional ACM, `doro.minseok.click`
+- 비공개 Frontend S3, CloudFront, WAF, Viewer용 us-east-1 ACM, ALB용 Regional ACM, POS `doro.minseok.click`과 Kiosk `kiosk.minseok.click`
 - Bootstrap이 만든 Public Route 53 Hosted Zone `minseok.click`에 Terraform이 관리하는 DNS Record
 - Provider Admin 전용 Pod Identity·OIDC/session 및 Edge-to-Store Access HMAC Secret Container, Internal ALB용 Security Group·Regional ACM과 고정 목적지 SSM Port Forwarding 문서
 
@@ -78,7 +78,10 @@ Frontend S3는 이 Foundation State가 새로 생성한다.
 
 Bootstrap Apply에서 `minseok.click` Public Hosted Zone을 먼저 생성하고, 등록기관 NS 위임과
 외부 DNS 전파를 확인한 뒤 Foundation을 Apply한다. Foundation은 Bootstrap Remote State의 Zone ID를
-사용해 ACM 검증과 Frontend·Origin Record를 만든다. 도메인 등록 자체와 등록기관 설정은 AWS
+사용해 ACM 검증과 Frontend·Origin Record를 만든다. Viewer 인증서는 POS와 Kiosk hostname을 모두
+포함하고, 두 hostname은 같은 S3 Artifact·CloudFront Distribution·`/api/*` VPC Origin을 사용한다.
+`kiosk_domain_name`의 기본값은 `kiosk.minseok.click`이며 변경할 때는 Hosted Zone 아래의 POS·Origin·
+Provider Admin과 겹치지 않는 hostname을 사용한다. 도메인 등록 자체와 등록기관 설정은 AWS
 Terraform 범위가 아니다.
 
 ```bash
@@ -253,7 +256,11 @@ ALB CloudWatch 경보를 추가한다. 무관한 EKS·EC2·RDS 교체나 VPC·S3
 
 API Cache Behavior의 Origin Request Policy는 Cookie·Query·CSRF 등 Viewer 값을 보존하고
 `Host`만 `origin.doro.minseok.click`로 바꿔 CloudFront Origin TLS 이름과 ALB 인증서를
-일치시킨다.
+일치시킨다. CloudFront는 Viewer의 Cookie Header를 값 변경 없이 전달한다. Backend의 인증 Cookie는
+`Domain` 속성을 설정하지 않는 host-only Cookie여야 하며, 이 경우 `doro.minseok.click`과
+`kiosk.minseok.click`은 같은 Distribution을 사용해도 브라우저 Cookie Jar가 분리된다. Backend가
+`Domain=minseok.click` 또는 `Domain=.minseok.click`을 발급하면 이 격리가 깨지므로 적용 전후
+`Set-Cookie` 응답을 반드시 확인한다.
 
 ## 5. Init·Plan
 
@@ -371,6 +378,8 @@ terraform output -raw frontend_admin_ecr_publisher_role_arn
 terraform output -raw frontend_bucket_name
 terraform output -raw frontend_cloudfront_distribution_id
 terraform output -raw frontend_ecr_repository_name
+terraform output -raw frontend_url
+terraform output -raw kiosk_frontend_url
 ```
 
 Front 저장소의 `prod` Environment Variable은 다음 Output과 연결한다.
@@ -382,6 +391,8 @@ Front 저장소의 `prod` Environment Variable은 다음 Output과 연결한다.
 | `FRONTEND_S3_BUCKET` | `frontend_bucket_name` | Public Artifact Bucket 이름 |
 | `FRONTEND_CLOUDFRONT_DISTRIBUTION_ID` | `frontend_cloudfront_distribution_id` | Public Distribution ID |
 | `FRONTEND_ECR_REPOSITORY` | `frontend_ecr_repository_name` | ECR URL이 아닌 Repository 이름 |
+| `PUBLIC_APP_ORIGIN` | `frontend_url` | POS 전용 HTTPS Origin |
+| `KIOSK_APP_ORIGIN` | `kiosk_frontend_url` | Kiosk 전용 HTTPS Origin |
 
 두 Role의 Trust Policy는 `repo:TeamDoroSoft/Doro-ERP-Front:environment:prod`만 허용한다. GitHub
 `prod` Environment의 Deployment Branch Rule도 `main`으로 제한하고, Service ECR Publisher Role을
@@ -450,11 +461,35 @@ CloudWatch Metric Dimension으로 추가하지 않고, Secret·Cookie·요청 Bo
 
 Vue Build 결과를 S3에 올린 뒤 CloudFront Cache를 무효화한다.
 
+Kiosk hostname 추가는 다음 순서로 적용한다.
+
+1. `terraform.tfvars`의 `kiosk_domain_name`이 승인된 `kiosk.minseok.click`인지 확인한다.
+2. 저장한 Plan에서 Viewer ACM 인증서 교체, 인증 CNAME, CloudFront Alias 추가, Kiosk A·AAAA Alias
+   추가만 의도한 변경인지 검토한다. 기존 `admin.doro.minseok.click` Regional 인증서와
+   `origin.doro.minseok.click` Regional 인증서 변경이 있으면 적용하지 않는다.
+3. Plan을 Apply하고 ACM이 `ISSUED`, CloudFront가 `Deployed`가 될 때까지 기다린다. Terraform의
+   `create_before_destroy`가 기존 Viewer 인증서를 유지한 채 두 hostname 인증서를 먼저 발급한다.
+4. 아래 DNS·TLS·Alias 검증 뒤 Kiosk Front의 진입 URL을 전환한다. 문제 발생 시 먼저 Kiosk 진입을
+   중단하고, 검토된 이전 Terraform 값으로 되돌리는 Plan을 새로 생성한다.
+
+주요 위험은 ACM DNS 검증 실패로 인한 Apply 대기, 이미 다른 Distribution에서 사용 중인 Kiosk Alias로
+인한 CloudFront 배포 실패, AAAA 전파 뒤 IPv6 경로 검증 누락, Backend가 상위 Domain Cookie를 발급해
+세션 격리가 무효화되는 경우다. DNS Alias를 먼저 별도 생성하지 않고 인증서와 Distribution 배포를
+Terraform 의존성 순서에 맡긴다.
+
 ```bash
 aws s3 sync FRONTEND_DIST_DIR "s3://$(terraform output -raw frontend_bucket_name)" --delete
 aws cloudfront list-distributions \
-  --query "DistributionList.Items[?Aliases.Items[?@=='doro.minseok.click']].[Id,Status,DomainName]" \
+  --query "DistributionList.Items[?Aliases.Items[?@=='doro.minseok.click'] && Aliases.Items[?@=='kiosk.minseok.click']].[Id,Status,DomainName,Aliases.Items]" \
   --output table
+
+dig +short A doro.minseok.click
+dig +short A kiosk.minseok.click
+dig +short AAAA kiosk.minseok.click
+curl -fsSI https://doro.minseok.click/
+curl -fsSI https://kiosk.minseok.click/
 ```
 
+두 hostname에서 인증 API를 호출한 뒤 응답의 `Set-Cookie`에 `Domain` 속성이 없는지 확인하고,
+브라우저 개발자 도구에서 각 hostname의 Cookie가 다른 hostname 요청에 포함되지 않는지 확인한다.
 Terraform에는 `/` 정적 SPA와 `/api/*` CloudFront Ordered Cache Behavior·VPC Origin이 코드화돼 있다. 다만 AWS Load Balancer Controller가 생성하는 내부 ALB와 HTTPS Listener를 포함한 실제 AWS Apply·Runtime 연결은 아직 검증되지 않았다.

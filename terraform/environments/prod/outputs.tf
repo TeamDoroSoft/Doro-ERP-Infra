@@ -113,6 +113,11 @@ output "frontend_url" {
   value       = "https://${var.domain_name}"
 }
 
+output "kiosk_frontend_url" {
+  description = "Prod Alpha Kiosk URL served by the shared public frontend distribution."
+  value       = "https://${var.kiosk_domain_name}"
+}
+
 output "frontend_ecr_repository_url" {
   description = "ECR repository URL for the Doro ERP frontend image."
   value       = aws_ecr_repository.frontend.repository_url
@@ -156,6 +161,11 @@ output "route53_public_hosted_zone_name_servers" {
 output "backend_api_base_url" {
   description = "Prod Alpha API base URL routed by CloudFront to the internal ALB."
   value       = var.enable_gateway_backend ? "https://${var.domain_name}/api" : null
+}
+
+output "kiosk_backend_api_base_url" {
+  description = "Prod Alpha Kiosk same-origin API base URL routed by CloudFront to the internal ALB."
+  value       = var.enable_gateway_backend ? "https://${var.kiosk_domain_name}/api" : null
 }
 
 output "gateway_backend_enabled" {

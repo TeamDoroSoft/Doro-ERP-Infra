@@ -161,8 +161,9 @@ resource "aws_cloudfront_function" "spa_rewrite" {
 resource "aws_acm_certificate" "frontend" {
   provider = aws.us_east_1
 
-  domain_name       = var.domain_name
-  validation_method = "DNS"
+  domain_name               = var.domain_name
+  subject_alternative_names = [var.kiosk_domain_name]
+  validation_method         = "DNS"
 
   lifecycle {
     create_before_destroy = true
@@ -226,8 +227,11 @@ resource "aws_route53_record" "certificate_validation" {
 resource "aws_acm_certificate_validation" "frontend" {
   provider = aws.us_east_1
 
-  certificate_arn         = aws_acm_certificate.frontend.arn
-  validation_record_fqdns = [aws_route53_record.certificate_validation[var.domain_name].fqdn]
+  certificate_arn = aws_acm_certificate.frontend.arn
+  validation_record_fqdns = [
+    aws_route53_record.certificate_validation[var.domain_name].fqdn,
+    aws_route53_record.certificate_validation[var.kiosk_domain_name].fqdn,
+  ]
 }
 
 resource "aws_acm_certificate_validation" "alpha_alb" {
@@ -298,7 +302,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   is_ipv6_enabled     = true
   comment             = "Doro ERP Prod Alpha"
   default_root_object = "index.html"
-  aliases             = [var.domain_name]
+  aliases             = [var.domain_name, var.kiosk_domain_name]
   price_class         = "PriceClass_200"
   web_acl_id          = aws_wafv2_web_acl.frontend.arn
 
@@ -413,6 +417,30 @@ resource "aws_route53_record" "frontend" {
   zone_id = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_id
   name    = var.domain_name
   type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.frontend.domain_name
+    zone_id                = aws_cloudfront_distribution.frontend.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "kiosk_frontend_ipv4" {
+  zone_id = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_id
+  name    = var.kiosk_domain_name
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.frontend.domain_name
+    zone_id                = aws_cloudfront_distribution.frontend.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "kiosk_frontend_ipv6" {
+  zone_id = data.terraform_remote_state.bootstrap.outputs.route53_public_hosted_zone_id
+  name    = var.kiosk_domain_name
+  type    = "AAAA"
 
   alias {
     name                   = aws_cloudfront_distribution.frontend.domain_name

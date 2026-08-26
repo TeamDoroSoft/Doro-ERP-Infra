@@ -58,6 +58,22 @@ variable "domain_name" {
   default     = "doro.minseok.click"
 }
 
+variable "kiosk_domain_name" {
+  description = "Public Prod Alpha Kiosk hostname served by the shared frontend CloudFront distribution."
+  type        = string
+  default     = "kiosk.minseok.click"
+
+  validation {
+    condition = (
+      var.kiosk_domain_name != var.domain_name &&
+      var.kiosk_domain_name != var.alb_origin_domain_name &&
+      var.kiosk_domain_name != var.provider_admin_domain_name &&
+      endswith(var.kiosk_domain_name, ".${var.hosted_zone_name}")
+    )
+    error_message = "kiosk_domain_name must be a distinct hostname beneath hosted_zone_name and must not reuse the public, origin, or Provider Admin hostname."
+  }
+}
+
 variable "alb_origin_domain_name" {
   description = "Dedicated DNS hostname on the Regional ACM certificate used by CloudFront for the internal ALB VPC origin."
   type        = string
