@@ -224,3 +224,8 @@ output "operations_alarm_topic_arn" {
   description = "SNS topic used by Prod Alpha operational alarms."
   value       = aws_sns_topic.operations.arn
 }
+
+output "cloudwatch_operations_dashboard_name" {
+  description = "CloudWatch dashboard for Prod Alpha EKS, application logs, queues and alarms."
+  value       = aws_cloudwatch_dashboard.operations.dashboard_name
+}
