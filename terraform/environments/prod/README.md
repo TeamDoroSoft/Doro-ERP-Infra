@@ -411,6 +411,10 @@ Edge Target 5xx를 SNS Topic으로 전달한다. `operations_alarm_email`을 설
 SNS 구독을 반드시 확인한다. Runtime을 아직 배포하지 않은 신규 환경에서는 서비스별 Running Pod
 Alarm이 먼저 발생하는 것이 정상이며, Image와 Migration을 준비한 뒤 모두 `OK`로 전환되는지 확인한다.
 
+현재 운영 방식은 이메일 구독을 사용하지 않으므로 `operations_alarm_email = null`을 유지한다. SNS Topic과
+Alarm 연결은 향후 알림 채널을 추가할 수 있도록 유지하며, 지금은 CloudWatch Console에서 Alarm 상태를
+직접 확인한다.
+
 ```bash
 terraform output -raw operations_alarm_topic_arn
 aws cloudwatch describe-alarms \
@@ -419,6 +423,25 @@ aws cloudwatch describe-alarms \
   --output table
 aws logs tail /aws/containerinsights/doro-erp-prod/application --since 10m
 ```
+
+Terraform이 만드는 `doro-erp-prod-alpha-operations` Dashboard에는 Failed Node, 여섯 Runtime과
+Provider Admin Front·Edge의 Running Pod, Node CPU·Memory, Pod Restart·Pending·CrashLoopBackOff·
+Image Pull Error, Pod CPU·Memory, PostgreSQL 상태, CloudFront 요청·오류율, DLQ Message, Alarm 상태,
+ElastiCache Redis CPU·Memory·Connection·Eviction, 최근 Application Error와 Gateway ALB 5xx가
+표시된다. 여덟 서비스 모두 Running Pod 2개 미만 경보를 사용한다. CloudWatch Console의 `대시보드`에서
+열거나 다음 Output으로 이름을 확인한다.
+
+```bash
+terraform output -raw cloudwatch_operations_dashboard_name
+```
+
+Logs Insights의 `doro-erp-prod/alpha/application-errors` 저장 쿼리는 최근 Application Error를 조회한다.
+`doro-erp-prod/alpha/request-trace-template`은 `REPLACE_WITH_REQUEST_ID`를 실제 `req-...` 값으로 바꿔
+Edge와 하위 서비스 사이의 요청을 시간순으로 추적한다.
+
+별도 Kubernetes Dashboard Workload는 설치하거나 외부에 공개하지 않는다. 배포 상태와 Git Drift는
+Argo CD에서 확인하고, 현재 Kubernetes Resource는 AWS Console의 `EKS > doro-erp-prod > 리소스`에서
+확인한다. 상세 로그와 Event는 CloudWatch 또는 `kubectl`을 사용한다.
 
 Alarm 임계치는 Prod 실제 요청량과 복구 시간을 관찰한 뒤 조정한다. Tenant·Store·Actor ID를
 CloudWatch Metric Dimension으로 추가하지 않고, Secret·Cookie·요청 Body를 Log에 남기지 않는다.
