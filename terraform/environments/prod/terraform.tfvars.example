@@ -8,6 +8,9 @@ eks_admin_principal_arn = "arn:aws:iam::727646470302:user/a-student-06"
 # Optional. Leave null until an operator is ready to confirm the SNS email subscription.
 operations_alarm_email = null
 
+# Raise an alarm after this many public checkout 429 responses in five minutes.
+edge_public_checkout_rate_limit_alarm_threshold = 30
+
 # Prod container logs are retained for 14 days by default.
 cloudwatch_log_retention_days = 14
 

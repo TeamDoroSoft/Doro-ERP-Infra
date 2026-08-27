@@ -417,8 +417,10 @@ aws logs describe-log-groups \
   --output table
 ```
 
-최소 Alarm은 EKS Failed Node, 서비스별 Running Pod 2개 미만, FIFO DLQ Message, ALB 자체 5xx와
-Edge Target 5xx를 SNS Topic으로 전달한다. `operations_alarm_email`을 설정했다면 Apply 뒤 수신함에서
+최소 Alarm은 EKS Failed Node, 서비스별 Running Pod 2개 미만, FIFO DLQ Message, ALB 자체 5xx,
+Edge Target 5xx와 공개 Checkout rate-limit Redis 장애·제한 급증을 SNS Topic으로 전달한다.
+rate-limit 경보는 Client IP·Digest·Token·publicId 없이 고정 Event 이름만 Container Insights Log
+Metric으로 변환한다. `operations_alarm_email`을 설정했다면 Apply 뒤 수신함에서
 SNS 구독을 반드시 확인한다. Runtime을 아직 배포하지 않은 신규 환경에서는 서비스별 Running Pod
 Alarm이 먼저 발생하는 것이 정상이며, Image와 Migration을 준비한 뒤 모두 `OK`로 전환되는지 확인한다.
 

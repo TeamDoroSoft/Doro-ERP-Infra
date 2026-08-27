@@ -32,6 +32,16 @@ variable "redis_user_id" {
   }
 }
 
+variable "edge_rate_limit_redis_user_id" {
+  description = "Existing password-protected ElastiCache user ID restricted to the Edge public-checkout rate-limit key prefix. Create only the user outside Terraform so its password never enters Terraform state."
+  type        = string
+
+  validation {
+    condition     = length(trimspace(var.edge_rate_limit_redis_user_id)) > 0 && var.edge_rate_limit_redis_user_id != var.redis_user_id
+    error_message = "edge_rate_limit_redis_user_id must identify a distinct pre-created Edge rate-limit user."
+  }
+}
+
 variable "redis_node_type" {
   description = "ElastiCache node type for Prod Alpha."
   type        = string
