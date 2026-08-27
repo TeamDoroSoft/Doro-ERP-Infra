@@ -1,5 +1,5 @@
 output "redis_primary_endpoint" {
-  description = "Store Access Redis hostname."
+  description = "Shared Store Access and Edge rate-limit Redis hostname."
   value       = aws_elasticache_replication_group.this.primary_endpoint_address
 }
 
@@ -19,5 +19,14 @@ output "store_access_secret_values" {
     STORE_ACCESS_REDIS_HOST        = aws_elasticache_replication_group.this.primary_endpoint_address
     STORE_ACCESS_REDIS_PORT        = tostring(aws_elasticache_replication_group.this.port)
     STORE_ACCESS_REDIS_SSL_ENABLED = "true"
+  }
+}
+
+output "edge_public_checkout_config_values" {
+  description = "Non-secret values to copy into the Edge public checkout runtime ConfigMap."
+  value = {
+    EDGE_PUBLIC_CHECKOUT_REDIS_HOST        = aws_elasticache_replication_group.this.primary_endpoint_address
+    EDGE_PUBLIC_CHECKOUT_REDIS_PORT        = tostring(aws_elasticache_replication_group.this.port)
+    EDGE_PUBLIC_CHECKOUT_REDIS_SSL_ENABLED = "true"
   }
 }

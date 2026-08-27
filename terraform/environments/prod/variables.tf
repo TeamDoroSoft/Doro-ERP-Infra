@@ -167,3 +167,14 @@ variable "alb_target_5xx_alarm_threshold" {
     error_message = "alb_target_5xx_alarm_threshold must be at least 1."
   }
 }
+
+variable "edge_public_checkout_rate_limit_alarm_threshold" {
+  description = "Number of public checkout rate-limit rejections in five minutes that raises the Prod Alpha alarm."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.edge_public_checkout_rate_limit_alarm_threshold >= 1
+    error_message = "edge_public_checkout_rate_limit_alarm_threshold must be at least 1."
+  }
+}

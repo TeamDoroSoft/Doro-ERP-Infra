@@ -1,10 +1,14 @@
 # Prod Alpha Redis Terraform
 
-Store Access의 Spring Session과 로그인 Rate Limit을 위한 단일 ElastiCache for Redis OSS 7.1 Stack이다. Terraform 관리형 Prod VPC의 Data Subnet 두 개를 Network Remote State에서 읽으며 EKS와 SSM 관리 EC2에서만 TLS `6379` 접근을 허용한다.
+Store Access의 Spring Session·로그인 Rate Limit과 Edge의 공개 Checkout Rate Limit을 위한 단일
+ElastiCache for Redis OSS 7.1 Stack이다. Terraform 관리형 Prod VPC의 Data Subnet 두 개를 Network
+Remote State에서 읽으며 EKS와 SSM 관리 EC2에서만 TLS `6379` 접근을 허용한다. 두 Runtime은 같은
+Replication Group을 사용하지만 서로 다른 ACL User와 Key Prefix로 격리한다.
 
 ## 사전 작업: 비밀번호 사용자 생성
 
-ElastiCache User의 비밀번호를 Terraform으로 만들면 평문이 Terraform State에 저장된다. 따라서 **User 한 개만 AWS Console에서 생성**하고 User Group과 Redis는 Terraform으로 관리한다.
+ElastiCache User의 비밀번호를 Terraform으로 만들면 평문이 Terraform State에 저장된다. 따라서
+**User 두 개는 AWS Console에서 생성**하고 User Group과 Redis는 Terraform으로 관리한다.
 
 AWS Console에서 `ElastiCache → User management → Create user`로 이동해 다음과 같이 입력한다.
 
@@ -16,6 +20,21 @@ AWS Console에서 `ElastiCache → User management → Create user`로 이동해
 - Tags: `Team=team2`, `Project=Doro-ERP`, `Environment=prod`, `Cell=alpha`, `ManagedBy=console-secret-bootstrap`
 
 강한 비밀번호를 생성해 `doro-erp/prod/alpha/store-access` Secret의 `STORE_ACCESS_REDIS_USERNAME=default`, `STORE_ACCESS_REDIS_PASSWORD=<비밀번호>`에 저장한다. 비밀번호를 `terraform.tfvars`, Shell History, Git에 기록하지 않는다.
+
+두 번째 User는 다음과 같이 공개 Checkout 전용 Prefix로 제한한다.
+
+- User ID: `doro-erp-prod-alpha-edge-rate-limit`
+- User name: `edge-public-checkout-rate-limit`
+- Engine: `Redis`
+- Authentication: Password
+- Access string: `on ~doro:edge:public-checkout:client:* +get +set +incr +eval +evalsha +ping`
+- Tags: `Team=team2`, `Project=Doro-ERP`, `Environment=prod`, `Cell=alpha`, `Service=edge`, `ManagedBy=console-secret-bootstrap`
+
+별도 강한 비밀번호를 생성해 `doro-erp/prod/alpha/edge` Secret의
+`EDGE_PUBLIC_CHECKOUT_REDIS_USERNAME=edge-public-checkout-rate-limit`,
+`EDGE_PUBLIC_CHECKOUT_REDIS_PASSWORD=<비밀번호>`에 저장한다. Store Access User나 비밀번호를
+Edge에 재사용하지 않는다. User ID만 `edge_rate_limit_redis_user_id` Terraform 변수에 기록하며
+비밀번호는 Terraform State·Plan에 넣지 않는다.
 
 ## 실행
 
@@ -51,7 +70,13 @@ Secret에는 다음 값이 최종적으로 있어야 한다.
 - `STORE_ACCESS_REDIS_PASSWORD`: Console에서 만든 비밀번호
 - `STORE_ACCESS_REDIS_SSL_ENABLED`: `true`
 
-이 Stack은 Spring Session Indexed Repository에 필요한 `notify-keyspace-events=Egx`와 세션 장애 시 조용한 Eviction을 막기 위한 `maxmemory-policy=noeviction`을 설정한다.
+`terraform output edge_public_checkout_config_values`의 Host·Port·SSL 값은 Edge ConfigMap에 반영한다.
+Edge Secret에는 위 전용 Username·Password와 별도로 생성한
+`EDGE_PUBLIC_CHECKOUT_CLIENT_RATE_LIMIT_HMAC_KEY`가 있어야 한다.
+
+이 Stack은 Spring Session Indexed Repository에 필요한 `notify-keyspace-events=Egx`와 세션 장애 시
+조용한 Eviction을 막기 위한 `maxmemory-policy=noeviction`을 설정한다. Edge User의 ACL은
+`doro:edge:public-checkout:client:*` Digest Counter 외의 Session·Login Key 접근을 거절한다.
 
 ## 확인
 
@@ -71,6 +96,10 @@ redis-cli --tls -h REDIS_PRIMARY_ENDPOINT -p 6379 --user default --askpass PING
 ```
 
 정상 응답은 `PONG`이다.
+
+Edge 전용 User로 `PING`과 Application의 Lua Script가 사용하는 Prefix에 대해서만 별도 승인된
+비민감 Test Digest로 `SET PX`·`GET`·`INCR`·`EVAL` 동작, Store Access Session Prefix 접근 거절을
+확인한다. Test Key는 짧은 TTL로 자동 만료시키고 실제 Client IP나 Token을 Key에 사용하지 않는다.
 
 ## 삭제
 

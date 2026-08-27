@@ -198,6 +198,64 @@ resource "aws_cloudwatch_metric_alarm" "edge_target_5xx" {
   ok_actions          = [aws_sns_topic.operations.arn]
 }
 
+resource "aws_cloudwatch_log_metric_filter" "edge_public_checkout_rate_limit_unavailable" {
+  name           = "${local.name_prefix}-alpha-edge-public-checkout-rate-limit-unavailable"
+  pattern        = "\"public_checkout_rate_limit_unavailable\""
+  log_group_name = aws_cloudwatch_log_group.container_insights["application"].name
+
+  metric_transformation {
+    name      = "PublicCheckoutRateLimitUnavailable"
+    namespace = "DoroERP/Edge"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "edge_public_checkout_rate_limited" {
+  name           = "${local.name_prefix}-alpha-edge-public-checkout-rate-limited"
+  pattern        = "\"public_checkout_rate_limit_limited\""
+  log_group_name = aws_cloudwatch_log_group.container_insights["application"].name
+
+  metric_transformation {
+    name      = "PublicCheckoutRateLimited"
+    namespace = "DoroERP/Edge"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "edge_public_checkout_rate_limit_unavailable" {
+  alarm_name          = "${local.name_prefix}-alpha-edge-public-checkout-rate-limit-unavailable"
+  alarm_description   = "The Edge public checkout distributed rate-limit store was unavailable."
+  namespace           = "DoroERP/Edge"
+  metric_name         = "PublicCheckoutRateLimitUnavailable"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  statistic           = "Sum"
+  threshold           = 1
+  period              = 300
+  evaluation_periods  = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operations.arn]
+  ok_actions          = [aws_sns_topic.operations.arn]
+
+  depends_on = [aws_cloudwatch_log_metric_filter.edge_public_checkout_rate_limit_unavailable]
+}
+
+resource "aws_cloudwatch_metric_alarm" "edge_public_checkout_rate_limited" {
+  alarm_name          = "${local.name_prefix}-alpha-edge-public-checkout-rate-limited"
+  alarm_description   = "The Edge public checkout client rate-limit rejected an unusual number of requests."
+  namespace           = "DoroERP/Edge"
+  metric_name         = "PublicCheckoutRateLimited"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  statistic           = "Sum"
+  threshold           = var.edge_public_checkout_rate_limit_alarm_threshold
+  period              = 300
+  evaluation_periods  = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.operations.arn]
+  ok_actions          = [aws_sns_topic.operations.arn]
+
+  depends_on = [aws_cloudwatch_log_metric_filter.edge_public_checkout_rate_limited]
+}
+
 resource "aws_cloudwatch_query_definition" "application_errors" {
   name = "${local.name_prefix}/alpha/application-errors"
 
@@ -327,7 +385,11 @@ resource "aws_cloudwatch_dashboard" "operations" {
               [for alarm in aws_cloudwatch_metric_alarm.service_running_pods : alarm.arn],
               [for alarm in aws_cloudwatch_metric_alarm.dlq_messages : alarm.arn],
               [for alarm in aws_cloudwatch_metric_alarm.alb_generated_5xx : alarm.arn],
-              [for alarm in aws_cloudwatch_metric_alarm.edge_target_5xx : alarm.arn]
+              [for alarm in aws_cloudwatch_metric_alarm.edge_target_5xx : alarm.arn],
+              [
+                aws_cloudwatch_metric_alarm.edge_public_checkout_rate_limit_unavailable.arn,
+                aws_cloudwatch_metric_alarm.edge_public_checkout_rate_limited.arn
+              ]
             )
           }
         },

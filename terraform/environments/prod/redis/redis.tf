@@ -29,7 +29,7 @@ resource "aws_elasticache_parameter_group" "this" {
 resource "aws_elasticache_user_group" "this" {
   engine        = "redis"
   user_group_id = "doro-erp-prod-alpha-store-access"
-  user_ids      = [var.redis_user_id]
+  user_ids      = [var.redis_user_id, var.edge_rate_limit_redis_user_id]
 
   tags = {
     Name    = "${local.name_prefix}-store-access"
