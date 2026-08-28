@@ -36,10 +36,13 @@ locals {
     edge-to-commerce         = ["edge", "commerce"]
     edge-to-queue            = ["edge", "queue"]
     commerce-to-store-access = ["commerce", "store-access"]
+    commerce-to-payment      = ["commerce", "payment"]
     store-access-to-commerce = ["store-access", "commerce"]
+    store-access-to-payment  = ["store-access", "payment"]
     payment-to-commerce      = ["payment", "commerce"]
     payment-to-store-access  = ["payment", "store-access"]
     commerce-to-queue        = ["commerce", "queue"]
+    queue-to-store-access    = ["queue", "store-access"]
     actor-context            = ["edge", "store-access", "commerce"]
   }
 
